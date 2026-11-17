@@ -40,3 +40,15 @@ test('repository URLs reject credential-bearing URLs and unrelated pages', () =>
     assert.throws(() => parseRepositoryURL(url, 'github'));
   }
 });
+
+test('a configured installation path and port survive GitLab file URL import', () => {
+  const parsed = parseRepositoryURL(
+    'https://git.example.com:8443/tools/gitlab/group/subgroup/tokens/-/blob/main/design.json',
+    'gitlab',
+    'git.example.com:8443/tools/gitlab/api/v4/',
+  );
+  assert.equal(parsed.baseUrl, 'https://git.example.com:8443/tools/gitlab');
+  assert.equal(parsed.owner, 'group/subgroup');
+  assert.equal(parsed.repository, 'tokens');
+  assert.equal(parsed.path, 'design.json');
+});

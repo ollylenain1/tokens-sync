@@ -148,6 +148,7 @@ function rpc(type: string, data: Record<string, unknown> = {}): Promise<any> {
   });
 }
 function repositoryClient(config: Connection): RepositoryClient {
+  config = normalizeConnection(config);
   if (demo) return new RepositoryClient(config);
   const fetcher: typeof fetch = async (input, options) => {
     const signal = options?.signal;
@@ -316,7 +317,7 @@ function connectionView() {
   <label class="check"><input type="checkbox" name="remember"${checked(draft.remember)}${disabled()}>Remember access token on this device</label>
   <p class="credential-note">Stored locally in Figma, not in an encrypted vault. Leave off to keep the token for this session.</p>
   <details class="settings-section" data-disclosure="advanced"${draft.baseUrl || draft.layout !== 'auto' ? ' open' : ''}><summary>Advanced connection</summary>
-  ${field('baseUrl', gitlab ? 'Base URL — Enterprise (optional)' : 'Server URL', gitlab ? 'https://gitlab.company.com' : 'https://api.github.com', gitlab ? 'text' : 'url', 'Leave blank for the hosted service. Supports enterprise servers.')}
+  ${field('baseUrl', gitlab ? 'Base URL — Enterprise (optional)' : 'Server URL', gitlab ? 'https://gitlab.company.com' : 'https://api.github.com', gitlab ? 'text' : 'url', gitlab ? 'For self-managed GitLab, enter the host and any installation path before using a repository URL.' : 'Leave blank for the hosted service. Supports enterprise servers.')}
   <label class="field"><span>Single-file format</span><select name="layout"${disabled()}><option value="auto"${selected(draft.layout, 'auto')}>Auto · detect from metadata</option><option value="bundle"${selected(draft.layout, 'bundle')}>Tokens Studio bundle (named sets)</option><option value="single-set"${selected(draft.layout, 'single-set')}>One token tree</option></select><small>Directories use one token set per JSON file.</small></label></details></form>
   ${progressView()}${notice ? `<div class="notice success" role="status">${esc(notice)}</div>` : ''}${errorView()}
   ${first ? '<button class="quiet full sample-link" data-action="sample">Explore sample tokens →</button>' : connection ? '<button class="quiet full error-color" data-action="disconnect">Remove connection &amp; stored credential</button>' : ''}
@@ -1208,7 +1209,7 @@ app.addEventListener('click', async (event) => {
         app.querySelector<HTMLInputElement>(`input[name="${recoveryField}"]`)?.focus();
         break;
       case 'parse-url': {
-        const parsed = parseRepositoryURL(repositoryURL, draft.provider);
+        const parsed = parseRepositoryURL(repositoryURL, draft.provider, draft.baseUrl);
         draft = {
           ...draft,
           provider: parsed.provider,

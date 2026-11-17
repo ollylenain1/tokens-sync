@@ -55,13 +55,18 @@ export function normalizeConnection(input: Connection): Connection {
     );
   if (c.path.split('/').some((p) => p === '..' || p === '.') || /[\u0000-\u001f\\]/.test(c.path))
     throw new SyncError('CONFIG', 'Use a repository-relative path without traversal segments.');
+  c.baseUrl = providerApiRoot(c.provider, c.baseUrl);
+  return c;
+}
+
+export function providerApiRoot(provider: Connection['provider'], baseUrl: string): string {
   let url: URL;
-  let server = c.baseUrl.trim();
-  if (c.provider === 'gitlab' && server && !/^[a-z][a-z\d+.-]*:/i.test(server))
+  let server = baseUrl.trim();
+  if (provider === 'gitlab' && server && !/^[a-z][a-z\d+.-]*:\/\//i.test(server))
     server = 'https://' + server;
   try {
     url = new URL(
-      server || (c.provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com'),
+      server || (provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com'),
     );
   } catch {
     throw new SyncError('CONFIG', 'Enter a valid HTTPS server URL.');
@@ -72,15 +77,14 @@ export function normalizeConnection(input: Connection): Connection {
       'The server URL must use HTTPS without credentials, query parameters or fragments.',
     );
   let path = url.pathname.replace(/\/+$/, '');
-  if (c.provider === 'github' && url.hostname === 'github.com') {
+  if (provider === 'github' && url.hostname === 'github.com') {
     url.hostname = 'api.github.com';
     path = '';
   }
-  if (c.provider === 'github' && url.hostname !== 'api.github.com' && !path.endsWith('/api/v3'))
+  if (provider === 'github' && url.hostname !== 'api.github.com' && !path.endsWith('/api/v3'))
     path += '/api/v3';
-  if (c.provider === 'gitlab' && !path.endsWith('/api/v4')) path += '/api/v4';
-  c.baseUrl = url.origin + path;
-  return c;
+  if (provider === 'gitlab' && !path.endsWith('/api/v4')) path += '/api/v4';
+  return url.origin + path;
 }
 export class RepositoryClient {
   readonly connection: Connection;
@@ -96,12 +100,13 @@ export class RepositoryClient {
     const c = this.connection;
     return JSON.stringify([c.provider, c.baseUrl, c.owner, c.repository, c.path]);
   }
+  private projectId?: number;
   private get repoPath(): string {
     const c = this.connection,
       enc = encodeURIComponent;
     return c.provider === 'github'
       ? `/repos/${enc(c.owner)}/${enc(c.repository)}`
-      : `/projects/${enc(/^\d+$/.test(c.repository) ? c.repository : [c.owner, c.repository].filter(Boolean).join('/'))}`;
+      : `/projects/${enc(this.projectId ?? [c.owner, c.repository].filter(Boolean).join('/'))}`;
   }
   async request(
     path: string,
@@ -217,7 +222,50 @@ export class RepositoryClient {
       );
     }
   }
+  private async resolveEnterpriseProject(signal?: AbortSignal) {
+    const c = this.connection;
+    if (
+      c.provider !== 'gitlab' ||
+      !c.owner ||
+      !c.token ||
+      this.projectId ||
+      c.baseUrl === 'https://gitlab.com/api/v4'
+    )
+      return;
+    // An enterprise proxy may reject encoded namespace slashes on project routes.
+    const namespace = c.owner + '/' + c.repository;
+    for (let page = 1; page <= 500; page++) {
+      const query =
+        'membership=true&simple=true&per_page=100&search=' + encodeURIComponent(c.repository);
+      let result;
+      try {
+        result = await this.request('/projects?' + query + '&page=' + page, false, signal);
+      } catch (error) {
+        // Some project-scoped tokens can read a project but cannot list memberships.
+        if (error instanceof ProviderError && [403, 404].includes(error.status)) return;
+        throw error;
+      }
+      let projects;
+      try {
+        projects = JSON.parse(result.text);
+      } catch {
+        throw new ProviderError(
+          'RESPONSE',
+          'GitLab returned an invalid project list. Check the enterprise base URL.',
+        );
+      }
+      if (!Array.isArray(projects))
+        throw new ProviderError('RESPONSE', 'GitLab returned an invalid project list.');
+      const match = projects.find((project) => project?.path_with_namespace === namespace);
+      if (Number.isSafeInteger(match?.id) && match.id > 0) {
+        this.projectId = match.id;
+        return;
+      }
+      if (projects.length < 100 || result.headers.get('x-next-page') === '') return;
+    }
+  }
   async defaultBranch(signal?: AbortSignal): Promise<string> {
+    await this.resolveEnterpriseProject(signal);
     const data = await this.get(this.repoPath, signal);
     if (typeof data?.default_branch !== 'string' || !data.default_branch.trim())
       throw new ProviderError(
@@ -227,6 +275,7 @@ export class RepositoryClient {
     return data.default_branch;
   }
   async revision(signal?: AbortSignal): Promise<string> {
+    await this.resolveEnterpriseProject(signal);
     const c = this.connection;
     const data = await this.get(
       this.repoPath +

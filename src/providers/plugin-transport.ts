@@ -1,5 +1,4 @@
 import { Connection, SyncError } from '../core/model';
-import { normalizeConnection } from './client';
 
 export interface PluginFetchResponse {
   headersObject: Record<string, string>;
@@ -20,22 +19,28 @@ export type PluginFetcher = (
 ) => Promise<PluginFetchResponse>;
 
 export async function readProviderRoute(
-  input: Connection,
+  connection: Connection,
   requestedUrl: string,
   fetcher: PluginFetcher,
   accept?: string,
 ): Promise<{ status: number; headers: Record<string, string>; body: string }> {
-  const connection = normalizeConnection(input);
-  const url = new URL(requestedUrl);
-  const apiRoot = new URL(connection.baseUrl);
-  const route = connection.provider === 'gitlab' ? '/projects/' : '/repos/';
+  // The UI passes its canonical API root. Figma's main sandbox has no browser URL API.
+  const root = connection.baseUrl;
+  const gitlab = connection.provider === 'gitlab';
+  const prefix = gitlab ? '/projects/' : '/repos/';
+  const relative = requestedUrl.slice(root.length);
+  const path = relative.split('?')[0];
   if (
-    url.protocol !== 'https:' ||
-    url.origin !== apiRoot.origin ||
-    !url.pathname.startsWith(apiRoot.pathname.replace(/\/$/, '') + route) ||
-    url.username ||
-    url.password ||
-    url.hash
+    !['github', 'gitlab'].includes(connection.provider) ||
+    !/^https:\/\/(?:[a-z0-9.-]+|\[[a-f0-9:]+\])(?::[0-9]+)?(?:\/[^/?#@\\\s]+)*$/i.test(root) ||
+    (gitlab && !root.endsWith('/api/v4')) ||
+    !requestedUrl.startsWith(root) ||
+    /[#\\\s\u0000-\u001f]/.test(requestedUrl) ||
+    /(?:^|\/)(?:\.|%2e){1,2}(?:\/|$)/i.test(root + path) ||
+    !(
+      path.startsWith(prefix) ||
+      (gitlab && path === '/projects' && relative.startsWith('/projects?'))
+    )
   )
     throw new SyncError('ORIGIN', 'Invalid provider API route.');
   const headers: Record<string, string> = {
@@ -49,13 +54,13 @@ export async function readProviderRoute(
   if (connection.token)
     headers[connection.provider === 'github' ? 'Authorization' : 'PRIVATE-TOKEN'] =
       connection.provider === 'github' ? `Bearer ${connection.token}` : connection.token;
-  const response = await fetcher(url.toString(), {
+  const response = await fetcher(requestedUrl, {
     method: 'GET',
     headers,
     credentials: 'omit',
     redirect: 'error',
   });
-  if (response.redirected || (response.url && response.url !== url.toString()))
+  if (response.redirected || (response.url && response.url !== requestedUrl))
     throw new SyncError(
       'REDIRECT',
       'The provider redirected the request. Use its final HTTPS API host directly.',

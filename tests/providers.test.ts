@@ -82,6 +82,11 @@ test('GitLab supports nested namespaces, pagination, pinned refs and raw JSON fi
       const url = String(input);
       urls.push(url);
       assert.equal((options?.headers as Record<string, string>)['PRIVATE-TOKEN'], config.token);
+      if (url.includes('/projects?'))
+        return json([
+          { path_with_namespace: 'other/design', id: 77 },
+          { path_with_namespace: 'org/subgroup/design', id: 42 },
+        ]);
       if (url.includes('/commits/')) return json({ id: sha });
       if (new URL(url).searchParams.get('page') === '1')
         return json(
@@ -99,9 +104,7 @@ test('GitLab supports nested namespaces, pagination, pinned refs and raw JSON fi
   const snapshot = await client.fetch();
   assert.equal(parseRepository(snapshot).sets.base.length, 1);
   assert(
-    urls.every((u) =>
-      u.startsWith('https://gitlab.example.com/api/v4/projects/org%2Fsubgroup%2Fdesign/'),
-    ),
+    urls.slice(1).every((u) => u.startsWith('https://gitlab.example.com/api/v4/projects/42/')),
   );
   assert(urls.some((u) => u.includes('tokens%2Fbase.json/raw?ref=' + sha)));
 });
@@ -299,6 +302,7 @@ test('GitLab single-file pull uses the configured project, slash branch and sibl
       assert.equal(options?.method, 'GET');
       assert.equal((options?.headers as Record<string, string>)['PRIVATE-TOKEN'], config.token);
       assert(!url.includes(config.token));
+      if (url.includes('/projects?')) return text('forbidden', 403);
       assert(
         url.startsWith('https://gitlab.company.test/api/v4/projects/org%2Fsubgroup%2Fdesign/'),
       );
@@ -318,5 +322,5 @@ test('GitLab single-file pull uses the configured project, slash branch and sibl
   const parsed = parseRepository(snapshot);
   assert.equal(snapshot.singleFile, 'tokens.json');
   assert.equal(parsed.sets.core[0].path, 'space');
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, 5);
 });

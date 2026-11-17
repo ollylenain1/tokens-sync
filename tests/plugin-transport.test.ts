@@ -5,7 +5,7 @@ import { PluginFetcher, readProviderRoute } from '../src/providers/plugin-transp
 
 const connection: Connection = {
   provider: 'gitlab',
-  baseUrl: 'https://gitlab.company.test/gitlab',
+  baseUrl: 'https://gitlab.company.test/gitlab/api/v4',
   owner: 'group/subgroup',
   repository: 'tokens',
   branch: 'main',
@@ -84,4 +84,24 @@ test('GitHub raw file responses retain the required media type', async () => {
     },
     'application/vnd.github.raw+json',
   );
+});
+
+test('project lookup works in the Figma sandbox without a URL global', async () => {
+  const original = globalThis.URL;
+  try {
+    Reflect.deleteProperty(globalThis, 'URL');
+    const lookup = connection.baseUrl + '/projects?membership=true&search=tokens';
+    await readProviderRoute(connection, lookup, async (requested) => {
+      assert.equal(requested, lookup);
+      return {
+        status: 200,
+        url: requested,
+        redirected: false,
+        headersObject: {},
+        text: async () => '[]',
+      };
+    });
+  } finally {
+    globalThis.URL = original;
+  }
 });
