@@ -2234,3 +2234,63 @@ button:active:not(:disabled) {
   gap: 8px;
   margin-top: 20px;
 }
+
+.gitlab-form {
+  display: grid;
+  gap: 16px;
+}
+.gitlab-form .field,
+.gitlab-form .credential-note,
+.gitlab-form .settings-section,
+.gitlab-form .small {
+  margin: 0;
+}
+.gitlab-form .url-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  padding: 12px;
+  background: var(--soft);
+  border-radius: var(--panel-radius);
+}
+.gitlab-form .project-fields,
+.gitlab-form .two {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  align-items: start;
+  gap: 12px;
+}
+.gitlab-form [data-action='default-branch'] {
+  margin-top: 4px;
+  color: var(--accent);
+}
+.gitlab-access {
+  display: grid;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.gitlab-form .credential-note {
+  margin-left: 22px;
+  color: var(--muted);
+}
+.gitlab-form .connection-guides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 4px;
+}
+.gitlab-form a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+.gitlab-form .settings-section[open] .field {
+  margin-top: 12px;
+}
+@media (max-width: 420px) {
+  .gitlab-form .project-fields,
+  .gitlab-form .two {
+    grid-template-columns: 1fr;
+  }
+}
