@@ -19,11 +19,35 @@ export function normalizeConnection(input: Connection): Connection {
     throw new SyncError('CONFIG', 'Select GitHub or GitLab.');
   const c = {
     ...input,
+    name: input.name?.trim(),
     owner: input.owner.trim().replace(/^\/+|\/+$/g, ''),
     repository: input.repository.trim(),
     branch: input.branch.trim(),
     path: input.path.trim().replace(/^\/+|\/+$/g, ''),
   };
+  if (c.provider === 'gitlab') {
+    const parts = [c.owner, c.repository]
+      .filter(Boolean)
+      .join('/')
+      .replace(/^\/+|\/+$/g, '')
+      .split('/');
+    if (
+      parts.some(
+        (part) => !part || part === '.' || part === '..' || /[\\\u0000-\u0020?#:@]/.test(part),
+      )
+    )
+      throw new SyncError(
+        'CONFIG',
+        'Enter a GitLab project as owner/repo, group/subgroup/repo, or a numeric project ID.',
+      );
+    c.repository = parts.pop() ?? '';
+    c.owner = /^\d+$/.test(c.repository) && !parts.length ? '' : parts.join('/');
+    if (!c.owner && !/^\d+$/.test(c.repository))
+      throw new SyncError(
+        'CONFIG',
+        'Enter the full GitLab project path (owner/repo), not a group URL.',
+      );
+  }
   if (!c.repository || !c.branch || (c.provider === 'github' && !c.owner))
     throw new SyncError(
       'CONFIG',
@@ -32,10 +56,12 @@ export function normalizeConnection(input: Connection): Connection {
   if (c.path.split('/').some((p) => p === '..' || p === '.') || /[\u0000-\u001f\\]/.test(c.path))
     throw new SyncError('CONFIG', 'Use a repository-relative path without traversal segments.');
   let url: URL;
+  let server = c.baseUrl.trim();
+  if (c.provider === 'gitlab' && server && !/^[a-z][a-z\d+.-]*:/i.test(server))
+    server = 'https://' + server;
   try {
     url = new URL(
-      c.baseUrl.trim() ||
-        (c.provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com'),
+      server || (c.provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com'),
     );
   } catch {
     throw new SyncError('CONFIG', 'Enter a valid HTTPS server URL.');

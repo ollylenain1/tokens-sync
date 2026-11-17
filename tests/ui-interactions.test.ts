@@ -464,3 +464,46 @@ test('partial composite diagnostics expose source definitions without changing e
   assert.match(ui.app.innerHTML, /PARTIAL_COMPOSITE/);
   assert.equal(ui.requests.length, count);
 });
+
+test('GitLab setup mirrors project-path fields and validates content before saving a named connection', async () => {
+  const urls: string[] = [];
+  const ui = await openUI(false, undefined, async (input) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes('/commits/')) return new Response(JSON.stringify({ id: 'a'.repeat(40) }));
+    if (url.includes('%24')) return new Response('{}', { status: 404 });
+    return new Response(
+      '{"$metadata":{"tokenSetOrder":["core"]},"core":{"space":{"type":"spacing","value":"8px"}}}',
+    );
+  });
+  await ui.click({ action: 'edit' });
+  await ui.click({ provider: 'gitlab' });
+  assert.match(ui.app.innerHTML, /Repository \(owner\/repo\)/);
+  assert.match(ui.app.innerHTML, /Personal access token/);
+  assert.match(ui.app.innerHTML, /Token storage location/);
+  assert.match(ui.app.innerHTML, /Tokens Studio GitLab setup guide/);
+  assert.doesNotMatch(ui.app.innerHTML, /name="owner"/);
+  for (const [name, value] of Object.entries({
+    name: 'Team design tokens',
+    repository: 'team/subgroup/design',
+    branch: 'feature/colors',
+    path: 'tokens.json',
+    baseUrl: 'gitlab.company.test',
+  }))
+    await ui.change({ name, type: 'text', value });
+  await ui.click({ action: 'connect' });
+  const saved = ui.requests.find((r) => r.type === 'saveConnection');
+  assert(saved);
+  assert.equal(saved.connection.owner, 'team/subgroup');
+  assert.equal(saved.connection.repository, 'design');
+  assert.equal(saved.connection.name, 'Team design tokens');
+  assert.equal(saved.connection.baseUrl, 'https://gitlab.company.test/api/v4');
+  assert(
+    urls.every((url) =>
+      url.startsWith('https://gitlab.company.test/api/v4/projects/team%2Fsubgroup%2Fdesign/'),
+    ),
+  );
+  assert.match(ui.app.innerHTML, /Team design tokens/);
+  await ui.click({ action: 'edit' });
+  assert.match(ui.app.innerHTML, /value="team\/subgroup\/design"/);
+});

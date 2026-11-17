@@ -7,7 +7,7 @@ Automated and standalone-browser results do not establish native Figma or provid
 
 ## Verified scope
 
-The full local check passes 116 tests, strict TypeScript, formatting and production bundling.
+The full local check passes 119 tests, strict TypeScript, formatting and production bundling.
 Controller tests exercise the bundled message bridge using a mock Figma API.
 Browser checks use the packaged UI with sample tokens and an in-memory document; they never write to Figma.
 Native acceptance on 15 November verified sample creation, repeat-preview idempotency, partial-failure reporting, and immediate Undo in the disposable file listed below. Other native scenarios remain open.
@@ -70,3 +70,5 @@ watch, local-drift handling in live mode, font installation recovery, or node-le
 Figma showed intermittent reconnect warnings; cloud persistence is not established by these checks.
 
 Further native checks are deferred at the user’s request to leave Figma alone. This does not change the verified results above or remove any remaining release limitation.
+
+GitLab setup now uses a combined project path and optional connection name, accepts bare HTTPS enterprise hostnames, and links to the Tokens Studio setup guide. Added regression coverage for canonical identity, single-file pulls, nested namespaces and saving/reopening the form. These are automated/browser results; authenticated GitLab and enterprise acceptance remain unverified.

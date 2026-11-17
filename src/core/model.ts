@@ -2,6 +2,7 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 export type Dict = Record<string, unknown>;
 export type ProviderKind = 'github' | 'gitlab';
 export interface Connection {
+  name?: string;
   provider: ProviderKind;
   baseUrl: string;
   owner: string;

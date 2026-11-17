@@ -250,3 +250,73 @@ test('default branch discovery uses repository metadata for both providers and r
   const empty = new RepositoryClient(config, async () => json({ default_branch: null }));
   await assert.rejects(empty.defaultBranch(), /No default branch/);
 });
+
+test('Tokens Studio GitLab project paths normalize consistently with existing split connections', () => {
+  const split = new RepositoryClient({
+    ...config,
+    provider: 'gitlab',
+    owner: 'org/subgroup',
+    repository: 'design',
+    baseUrl: 'https://gitlab.company.test/gitlab/api/v4',
+  });
+  const combined = new RepositoryClient({
+    ...config,
+    provider: 'gitlab',
+    owner: '',
+    repository: '/org/subgroup/design/',
+    baseUrl: 'gitlab.company.test/gitlab',
+    name: ' Team tokens ',
+  });
+  assert.equal(combined.identity, split.identity);
+  assert.equal(combined.connection.name, 'Team tokens');
+  assert.equal(combined.connection.baseUrl, 'https://gitlab.company.test/gitlab/api/v4');
+  for (const repository of [
+    'org',
+    'org//design',
+    'org/../design',
+    'https://gitlab.com/org/design',
+    'org/design?token=secret',
+  ])
+    assert.throws(() =>
+      normalizeConnection({ ...config, provider: 'gitlab', owner: '', repository }),
+    );
+});
+
+test('GitLab single-file pull uses the configured project, slash branch and sibling metadata', async () => {
+  const requests: string[] = [];
+  const client = new RepositoryClient(
+    {
+      ...config,
+      provider: 'gitlab',
+      owner: '',
+      repository: 'org/subgroup/design',
+      path: 'design/tokens.json',
+      baseUrl: 'gitlab.company.test',
+    },
+    async (input, options) => {
+      const url = String(input);
+      requests.push(url);
+      assert.equal(options?.method, 'GET');
+      assert.equal((options?.headers as Record<string, string>)['PRIVATE-TOKEN'], config.token);
+      assert(!url.includes(config.token));
+      assert(
+        url.startsWith('https://gitlab.company.test/api/v4/projects/org%2Fsubgroup%2Fdesign/'),
+      );
+      if (url.includes('/commits/')) {
+        assert(url.endsWith('/feature%2Fcolors'));
+        return json({ id: sha });
+      }
+      assert(url.endsWith('ref=' + sha));
+      if (url.includes('%24themes.json')) return text('missing', 404);
+      if (url.includes('%24metadata.json')) return text('{"tokenSetOrder":["core"]}');
+      return text(
+        '{"$metadata":{"tokenSetOrder":["core"]},"core":{"space":{"type":"spacing","value":"8px"}}}',
+      );
+    },
+  );
+  const snapshot = await client.fetch();
+  const parsed = parseRepository(snapshot);
+  assert.equal(snapshot.singleFile, 'tokens.json');
+  assert.equal(parsed.sets.core[0].path, 'space');
+  assert.equal(requests.length, 4);
+});

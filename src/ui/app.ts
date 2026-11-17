@@ -261,17 +261,19 @@ function providerLogo(provider: 'github' | 'gitlab') {
 }
 function connectionView() {
   const first = !connection && !sample;
+  const gitlab = draft.provider === 'gitlab';
   return `<main class="main form-view" data-scroll="form"><div class="settings-heading">${!first ? '<button class="quiet icon-button" data-action="back" aria-label="Back to tokens">←</button>' : ''}<div><h1>${first ? 'Connect a repository' : 'Repository connection'}</h1><p>Bring your tokens into Figma as variables and styles.</p></div></div>
   <div class="provider-tabs" aria-label="Repository provider"><button aria-pressed="${draft.provider === 'github'}" class="${draft.provider === 'github' ? 'selected' : ''}" data-provider="github"${disabled()}>${providerLogo('github')} GitHub</button><button aria-pressed="${draft.provider === 'gitlab'}" class="${draft.provider === 'gitlab' ? 'selected' : ''}" data-provider="gitlab"${disabled()}>${providerLogo('gitlab')} GitLab</button></div>
-  <form id="connection-form"><label class="field"><span>Repository or file URL</span><input id="repository-url" type="url" value="${esc(repositoryURL)}" placeholder="https://github.com/team/design-tokens" autocomplete="off"${disabled()}><small>For enterprise URLs, select the provider first. Manual fields remain editable.</small></label><button type="button" data-action="parse-url"${disabled()}>Use URL</button><div class="two">${field('owner', draft.provider === 'github' ? 'Owner / organisation' : 'Namespace (optional for ID)', draft.provider === 'github' ? 'your-team' : 'group/subgroup')}${field('repository', draft.provider === 'github' ? 'Repository' : 'Project name / ID', 'design-tokens')}</div>
-  <div class="two">${field('branch', 'Branch', 'main')}${field('path', 'File or directory path', 'tokens')}</div>
+  <form id="connection-form"><label class="field"><span>Repository or file URL</span><input id="repository-url" type="url" value="${esc(repositoryURL)}" placeholder="${gitlab ? 'https://gitlab.com/team/design-tokens' : 'https://github.com/team/design-tokens'}" autocomplete="off"${disabled()}><small>For enterprise URLs, select the provider first. Manual fields remain editable.</small></label><button type="button" data-action="parse-url"${disabled()}>Use URL</button>${gitlab ? `${field('name', 'Name (optional)', 'My GitLab tokens', 'text', 'A nickname for this connection.')}${field('repository', 'Repository (owner/repo)', 'group/subgroup/design-tokens', 'text', 'Use the full project path, not a group page. Numeric project IDs also work.')}` : `<div class="two">${field('owner', 'Owner / organisation', 'your-team')}${field('repository', 'Repository', 'design-tokens')}</div>`}
+  <div class="two">${field('branch', 'Branch', 'main')}${field('path', gitlab ? 'Token storage location (file/folder path)' : 'File or directory path', 'tokens.json', 'text', gitlab ? 'Use tokens.json for a single file, or tokens for a folder of token sets and themes. The path must already exist.' : '')}</div>
   <button type="button" class="quiet tiny" data-action="default-branch"${disabled()}>Find default branch</button>
-  ${field('token', 'Access token', 'Optional for public repositories', 'password', draft.provider === 'github' ? 'Fine-grained token with Contents: read access.' : 'Project access token with read_api access.')}
+  ${field('token', gitlab ? 'Personal access token' : 'Access token', 'Optional for public repositories', 'password', draft.provider === 'github' ? 'Fine-grained token with Contents: read access.' : 'Personal or project access token with read_api access. An existing api token also works.')}
+  ${gitlab ? '<p class="small"><a href="https://docs.tokens.studio/token-storage/remote/sync-git-gitlab" target="_blank" rel="noopener noreferrer">Tokens Studio GitLab setup guide ↗</a></p>' : ''}
   <p class="small"><a href="${draft.provider === 'github' ? 'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens' : 'https://docs.gitlab.com/user/profile/personal_access_tokens/'}" target="_blank" rel="noopener noreferrer">Access token setup guide ↗</a></p>
   <label class="check"><input type="checkbox" name="remember"${checked(draft.remember)}${disabled()}>Remember access token on this device</label>
   <p class="credential-note">Stored locally in Figma, not in an encrypted vault. Leave off to keep the token for this session.</p>
   <details class="settings-section" data-disclosure="advanced"${draft.baseUrl || draft.layout !== 'auto' ? ' open' : ''}><summary>Advanced connection</summary>
-  ${field('baseUrl', 'Server URL', draft.provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com', 'url', 'Leave blank for the hosted service. Supports enterprise servers.')}
+  ${field('baseUrl', gitlab ? 'Base URL — Enterprise (optional)' : 'Server URL', gitlab ? 'https://gitlab.company.com' : 'https://api.github.com', gitlab ? 'text' : 'url', 'Leave blank for the hosted service. Supports enterprise servers.')}
   <label class="field"><span>Single-file format</span><select name="layout"${disabled()}><option value="auto"${selected(draft.layout, 'auto')}>Auto · detect from metadata</option><option value="bundle"${selected(draft.layout, 'bundle')}>Tokens Studio bundle (named sets)</option><option value="single-set"${selected(draft.layout, 'single-set')}>One token tree</option></select><small>Directories use one token set per JSON file.</small></label></details></form>
   ${progressView()}${notice ? `<div class="notice success" role="status">${esc(notice)}</div>` : ''}${errorView()}
   ${first ? '<button class="quiet full sample-link" data-action="sample">Explore sample tokens →</button>' : connection ? '<button class="quiet full error-color" data-action="disconnect">Remove connection &amp; stored credential</button>' : ''}
@@ -609,7 +611,7 @@ function mainView() {
     (d) => d.level !== 'info',
   ).length;
   const c = connection;
-  return `<main class="main workspace companion-workspace"><section class="source-row"><span class="source-icon">${icon('git')}</span><div class="source-text"><button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.repository)}</span>${icon('chevron')}</button></div>${settingsMenu()}</section>
+  return `<main class="main workspace companion-workspace"><section class="source-row"><span class="source-icon">${icon('git')}</span><div class="source-text"><button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.name || c?.repository)}</span>${icon('chevron')}</button></div>${settingsMenu()}</section>
   ${tab !== 'variables' ? `<div class="secondary-heading"><button class="quiet tiny" data-tab="variables">← Variables</button><strong>Styles</strong></div>` : ''}${browserToolbar()}
   <div class="feedback">${progressView()}${errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}</div>
   <section class="browser-content" aria-label="${tab === 'styles' ? 'Styles' : 'Variables'}" aria-busy="${busy()}">${tab === 'variables' ? variableView() : styleView()}</section>
@@ -841,7 +843,7 @@ app.addEventListener('input', (event) => {
     const secret = app.querySelector<HTMLInputElement>('input[name="token"]');
     if (secret) secret.value = '';
   }
-  if (input.name && input.name in draft)
+  if (input.name && (input.name === 'name' || input.name in draft))
     (draft as any)[input.name] = input.type === 'checkbox' ? input.checked : input.value;
   if (input.id === 'repository-url') repositoryURL = input.value;
   if (input.id === 'token-search') {
@@ -874,7 +876,7 @@ app.addEventListener('input', (event) => {
 app.addEventListener('change', async (event) => {
   const input = event.target as HTMLInputElement;
   try {
-    if (input.name && input.name in draft)
+    if (input.name && (input.name === 'name' || input.name in draft))
       (draft as any)[input.name] = input.type === 'checkbox' ? input.checked : input.value;
     if (input.dataset.sendOutput) {
       settings[input.dataset.sendOutput as 'variables' | 'styles'] = input.checked;
@@ -1005,7 +1007,17 @@ app.addEventListener('click', async (event) => {
       return;
     }
     if (button.dataset.provider) {
-      draft.provider = button.dataset.provider as Connection['provider'];
+      const nextProvider = button.dataset.provider as Connection['provider'];
+      if (nextProvider === draft.provider) return;
+      if (nextProvider === 'gitlab') {
+        draft.repository = [draft.owner, draft.repository].filter(Boolean).join('/');
+        draft.owner = '';
+      } else if (draft.repository.includes('/')) {
+        const parts = draft.repository.split('/');
+        draft.repository = parts.pop()!;
+        draft.owner = parts.join('/');
+      }
+      draft.provider = nextProvider;
       draft.baseUrl = '';
       draft.token = '';
       render();
@@ -1107,7 +1119,13 @@ app.addEventListener('click', async (event) => {
         render();
         break;
       case 'recover-connection':
-        if (view !== 'connection') draft = connection ? { ...connection } : draft;
+        if (view !== 'connection' && connection) {
+          draft = { ...connection };
+          if (draft.provider === 'gitlab') {
+            draft.repository = [draft.owner, draft.repository].filter(Boolean).join('/');
+            draft.owner = '';
+          }
+        }
         view = 'connection';
         render();
         app.querySelector<HTMLInputElement>(`input[name="${recoveryField}"]`)?.focus();
@@ -1118,8 +1136,11 @@ app.addEventListener('click', async (event) => {
           ...draft,
           provider: parsed.provider,
           baseUrl: parsed.baseUrl,
-          owner: parsed.owner,
-          repository: parsed.repository,
+          owner: parsed.provider === 'gitlab' ? '' : parsed.owner,
+          repository:
+            parsed.provider === 'gitlab'
+              ? `${parsed.owner}/${parsed.repository}`
+              : parsed.repository,
           branch: parsed.branch,
           path: parsed.path,
           token: '',
@@ -1213,6 +1234,10 @@ app.addEventListener('click', async (event) => {
         break;
       case 'edit':
         draft = connection ? { ...connection } : blankConnection();
+        if (draft.provider === 'gitlab') {
+          draft.repository = [draft.owner, draft.repository].filter(Boolean).join('/');
+          draft.owner = '';
+        }
         view = 'connection';
         error = '';
         notice = '';

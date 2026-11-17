@@ -25,7 +25,7 @@ The local development manifest uses a descriptive development ID. If your Figma 
 ## Connect and sync
 
 - **GitHub:** owner/organisation, repository, branch and token directory or JSON file. Use a fine-grained PAT restricted to the repository with **Contents: read**. Public repositories can omit the token.
-- **GitLab:** namespace/project or numeric project ID, branch and path. A project-scoped **read_api** token supports the complete tree/commit/file workflow.
+- **GitLab:** an optional connection name, full **Repository (owner/repo)** path (including subgroups), branch and token file/folder path. Numeric project IDs also work. Use a personal or project token with **read_api**; an existing **api** token is also accepted. An enterprise base URL may include or omit `https://`. See [GitLab setup compatibility](docs/GITLAB_SETUP.md).
 - **Enterprise hosts:** enter the HTTPS server URL. GitHub `/api/v3` and GitLab `/api/v4` are appended when necessary.
 - **Storage:** a directory contains named JSON token sets plus optional `$themes.json` / `$metadata.json`; a single-file bundle contains named sets and optional `$themes` / `$metadata`. Use the format selector for metadata-free single-file bundles.
 
