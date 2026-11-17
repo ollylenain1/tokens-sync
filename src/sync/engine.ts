@@ -335,6 +335,7 @@ export async function applyPlan(
           variableIds,
           previous,
           plan.model.settings.preserveBindings,
+          op.replacedBindings,
         );
         if (material.conflict) throw new SyncError('BINDING_CONFLICT', material.conflict);
         if (Object.values(material.bindings).some((id) => id.startsWith('pending:')))

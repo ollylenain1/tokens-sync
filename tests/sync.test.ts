@@ -371,3 +371,36 @@ test('5,000-token planning yields to the event loop and repeated sync stays dete
   assert.equal(next.counts.variables.unchanged, 5000);
   assert.equal(next.counts.variables.new, 0);
 });
+
+test('deleted collections and variables can be staged together while existing styles keep their IDs', async () => {
+  const mock = mockFigma();
+  await run(mock);
+  const styleIds = mock.styles.map((style) => style.id);
+  const expected = mock.collections.length + mock.variables.length;
+  mock.collections.length = 0;
+  mock.variables.length = 0;
+  const pending = await preview(mock);
+  const missing = [...pending.collections, ...pending.variables].filter(
+    (row) => row.action === 'conflicting' && row.missingTarget,
+  );
+  assert.equal(missing.length, expected);
+  const choices = Object.fromEntries(missing.map((row) => [row.key, 'create']));
+  const resolved = await preview(mock, fixture, defaultSettings, choices);
+  assert.deepEqual(
+    [...resolved.collections, ...resolved.variables, ...resolved.styles]
+      .filter((op) => op.action === 'conflicting')
+      .map((op) => op.reason),
+    [],
+  );
+  assert.equal(mock.variables.length, 0);
+  const report = await applyPlan(resolved, mock.adapter, mock.store.read(), mock.store, {
+    cancelled: false,
+    progress: () => {},
+  });
+  assert.equal(report.failed, 0);
+  assert.equal(mock.collections.length + mock.variables.length, expected);
+  assert.deepEqual(
+    mock.styles.map((style) => style.id),
+    styleIds,
+  );
+});

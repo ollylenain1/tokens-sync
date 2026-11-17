@@ -294,10 +294,18 @@ function providerLogo(provider: 'github' | 'gitlab') {
         image(providerLogos.githubWhite, 'github-dark')
     : image(providerLogos.gitlab);
 }
+function welcomeView() {
+  return `<main class="main welcome"><div class="welcome-inner">
+    <div class="welcome-art" aria-hidden="true"><div class="welcome-file">tokens.json<br><b>{ }</b></div><div class="welcome-variable"><i></i>color/brand</div></div>
+    <h1>Bring your tokens<br>into Figma.</h1>
+    <p>Connect a GitHub or GitLab repository to preview your design tokens and apply them as Figma variables and styles.</p>
+    <div class="welcome-actions"><button class="primary" data-action="edit">Connect repository</button><button data-action="sample">Explore sample tokens</button></div>
+  </div></main>`;
+}
 function connectionView() {
   const first = !connection && !sample;
   const gitlab = draft.provider === 'gitlab';
-  return `<main class="main form-view" data-scroll="form"><div class="settings-heading">${!first ? '<button class="quiet icon-button" data-action="back" aria-label="Back to tokens">←</button>' : ''}<div><h1>${first ? 'Connect a repository' : 'Repository connection'}</h1><p>Bring your tokens into Figma as variables and styles.</p></div></div>
+  return `<main class="main form-view" data-scroll="form"><div class="settings-heading"><button class="quiet icon-button" data-action="back" aria-label="Back">←</button><div><h1>${first ? 'Connect a repository' : 'Repository connection'}</h1><p>Bring your tokens into Figma as variables and styles.</p></div></div>
   <div class="provider-tabs" aria-label="Repository provider"><button aria-pressed="${draft.provider === 'github'}" class="${draft.provider === 'github' ? 'selected' : ''}" data-provider="github"${disabled()}>${providerLogo('github')} GitHub</button><button aria-pressed="${draft.provider === 'gitlab'}" class="${draft.provider === 'gitlab' ? 'selected' : ''}" data-provider="gitlab"${disabled()}>${providerLogo('gitlab')} GitLab</button></div>
   <form id="connection-form"><label class="field"><span>Repository or file URL</span><input id="repository-url" type="url" value="${esc(repositoryURL)}" placeholder="${gitlab ? 'https://gitlab.com/team/design-tokens' : 'https://github.com/team/design-tokens'}" autocomplete="off"${disabled()}><small>For enterprise URLs, select the provider first. Manual fields remain editable.</small></label><button type="button" data-action="parse-url"${disabled()}>Use URL</button>${gitlab ? `${field('name', 'Name (optional)', 'My GitLab tokens', 'text', 'A nickname for this connection.')}${field('repository', 'Repository (owner/repo)', 'group/subgroup/design-tokens', 'text', 'Use the full project path, not a group page. Numeric project IDs also work.')}` : `<div class="two">${field('owner', 'Owner / organisation', 'your-team')}${field('repository', 'Repository', 'design-tokens')}</div>`}
   <div class="two">${field('branch', 'Branch', 'main')}${field('path', gitlab ? 'Token storage location (file/folder path)' : 'File or directory path', 'tokens.json', 'text', gitlab ? 'Use tokens.json for a single file, or tokens for a folder of token sets and themes. The path must already exist.' : '')}</div>
@@ -335,7 +343,7 @@ function conflictControls(row: Row) {
   if (row.action !== 'conflicting') return '';
   if (row.localDrift)
     return `<div class="conflict-controls"><p>${esc(row.reason)}</p><button data-skip="${esc(row.key)}"${disabled()}>Keep local · skip</button><button data-repository="${esc(row.key)}"${disabled()}>Use repository</button></div>`;
-  return `<div class="conflict-controls"><p>${esc(row.reason)}</p>${row.candidates ? `<input data-candidate-search="${esc(row.key)}" placeholder="Find a local target by name…" aria-label="Filter compatible targets"><select data-choice="${esc(row.key)}" aria-label="Resolve mapping for ${esc(row.name)}"${disabled()}><option value="">Choose a safe recovery…</option><option value="skip">Skip this item</option><option value="create">Create a new local target</option>${candidateOptions(row.candidates.slice(0, 100))}</select>` : `<button class="tiny" data-skip="${esc(row.key)}"${disabled()}>Skip this item</button>`}</div>`;
+  return `<div class="conflict-controls"><p>${esc(row.reason)}</p>${row.candidates ? `${row.candidates.length ? `<input data-candidate-search="${esc(row.key)}" placeholder="Find a local target by name…" aria-label="Filter compatible targets">` : ''}<select data-choice="${esc(row.key)}" aria-label="Resolve mapping for ${esc(row.name)}"${disabled()}><option value="">Choose a safe recovery…</option><option value="skip">Skip this item</option><option value="create">Create a new local target</option>${candidateOptions(row.candidates.slice(0, 100))}</select>` : `<button class="tiny" data-skip="${esc(row.key)}"${disabled()}>Skip this item</button>`}</div>`;
 }
 function candidateOptions(candidates: { id: string; name: string }[]) {
   return candidates
@@ -431,7 +439,15 @@ function valueTrigger(row: VariableRow | StyleRow, mode: { key: string; name: st
       : row.swatch
         ? valueView(row.swatch)
         : `<span class="style-summary">${esc(row.summary)}</span>`;
-  return `<button class="value-trigger" data-value="${esc(JSON.stringify([row.key, mode.key]))}" aria-label="${esc(`Inspect ${row.name}, ${mode.name}`)}" aria-haspopup="dialog" aria-controls="value-inspector" aria-expanded="false">${thumbnail ? `<span class="gradient-thumbnail" style="${esc(thumbnail.css)}" role="img" aria-label="${esc(thumbnail.label)}"></span>` : ''}${content}</button>`;
+  const cellValue = `${thumbnail ? `<span class="gradient-thumbnail" style="${esc(thumbnail.css)}" role="img" aria-label="${esc(thumbnail.label)}"></span>` : ''}${content}`;
+  const hasIssue = preview?.diagnostics.some(
+    (diagnostic) =>
+      diagnostic.token === row.path &&
+      (diagnostic.level === 'warning' || diagnostic.level === 'error'),
+  );
+  if (row.action === 'unchanged' && !hasIssue)
+    return `<span class="value-display">${cellValue}</span>`;
+  return `<button class="value-trigger" data-value="${esc(JSON.stringify([row.key, mode.key]))}" aria-label="${esc(`Inspect ${row.name}, ${mode.name}`)}" aria-haspopup="dialog" aria-controls="value-inspector" aria-expanded="false">${cellValue}</button>`;
 }
 function comparisonValue(value: unknown): string {
   if (value === undefined) return '<span class="muted">Not present</span>';
@@ -572,14 +588,23 @@ function diagnosticsView() {
 }
 function reportView() {
   if (!report) return '';
-  return `<section class="notice ${reportHasIssues(report) ? 'info' : 'success'}" role="status"><div class="notice-title">${esc(reportTitle(report))}</div>
-  <p class="small">Last sync · ${esc(report.revision ?? 'Unknown revision')} ${report.completedAt ? '· ' + esc(new Date(report.completedAt).toLocaleString()) : ''}</p>
-  ${report.groups ? `<p class="small">Collections: ${esc(report.groups.join(', '))}</p>` : ''}
+  return `<section class="sync-result">
+  <p class="result-status" role="status">${esc(reportTitle(report))}</p>
+  <dl class="report-grid">${(['created', 'updated', 'unchanged', 'skipped', 'failed'] as const).map((key) => `<div><dt>${key}</dt><dd>${report![key]}</dd></div>`).join('')}</dl>
   ${report.cancelled ? '<p>Completed changes are saved. Fetch a new preview to resume.</p>' : ''}
-  <p>${report.preserveMetadata === false ? 'Token descriptions were applied to synced outputs. Existing identities and node bindings are preserved.' : 'Existing identities and local descriptions are preserved.'}</p>
-  ${reportHasIssues(report) ? '<p>Review skipped and failed items below. To revert the last sync immediately, use Figma Undo before making other edits.</p>' : ''}
-  <div class="report-grid">${(['created', 'updated', 'unchanged', 'skipped', 'failed'] as const).map((k) => `<div><strong>${report![k]}</strong><span>${k}</span></div>`).join('')}</div>${report.diagnostics.map((d) => `<p class="${d.level === 'error' ? 'error-color' : 'muted'}">${esc(d.token)}: ${esc(d.message)}</p>`).join('')}
+  ${reportHasIssues(report) ? '<p>To revert the last sync immediately, use Figma Undo before making other edits.</p>' : ''}
+  ${report.diagnostics.length ? `<ul class="result-issues" aria-label="Sync diagnostics">${report.diagnostics.map((d) => `<li>${d.token ? `<strong>${esc(d.token)}</strong> ` : ''}<span class="${d.level === 'error' ? 'error-color' : 'muted'}">${esc(d.message)}</span></li>`).join('')}</ul>` : ''}
+  <details class="result-details"><summary>Sync details</summary>
+    <p>Revision ${esc(report.revision ?? 'Unknown revision')}${report.completedAt ? ' · ' + esc(new Date(report.completedAt).toLocaleString()) : ''}</p>
+    ${report.groups?.length ? `<p>Collections: ${esc(report.groups.join(', '))}</p>` : ''}
+    <p>${report.preserveMetadata === false ? 'Token descriptions were applied to synced outputs. Existing identities and node bindings are preserved.' : 'Existing identities and local descriptions are preserved.'}</p>
+  </details>
   </section>`;
+}
+function missingTargets() {
+  return [...(preview?.collections ?? []), ...(preview?.variables ?? [])].filter(
+    (row) => row.action === 'conflicting' && row.missingTarget,
+  );
 }
 function sendDialogView() {
   if (!dialog) return '';
@@ -592,7 +617,11 @@ function sendDialogView() {
     const hasOutput = [...(preview?.variables ?? []), ...(preview?.styles ?? [])].some(
       (row) => row.path === diagnosticPath || row.path.startsWith(diagnosticPath + '.'),
     );
-    return `<dialog class="sync-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">${dialog === 'issues' ? 'Export warnings' : 'Resolve conflicts'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close details">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${dialog === 'issues' ? diagnosticTokenContext(hasOutput) + diagnosticsView() : conflicts.map((row) => `<section class="change"><strong>${esc(row.name)}</strong>${diffView(row)}${conflictControls(row)}</section>`).join('') || '<p>No unresolved conflicts.</p>'}</div></dialog>`;
+    const missing = missingTargets();
+    const recovery = missing.length
+      ? `<section class="change"><strong>Deleted from Figma</strong><p>${missing.length} previously synced items are missing. Stage them for recreation with new Figma IDs. Changes are applied when you send to Figma.</p><button data-action="recreate-missing"${disabled()}>Recreate ${missing.length} missing items</button></section>`
+      : '';
+    return `<dialog class="sync-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">${dialog === 'issues' ? 'Export warnings' : 'Resolve conflicts'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close details">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${dialog === 'issues' ? diagnosticTokenContext(hasOutput) + diagnosticsView() : recovery + conflicts.map((row) => `<details class="change"><summary>${esc(row.name)}</summary>${conflictControls(row)}${diffView(row)}</details>`).join('') || '<p>No unresolved conflicts.</p>'}</div></dialog>`;
   }
   if (dialog === 'report')
     return `<dialog class="sync-dialog result-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Last sync result</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close result">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${reportView()}</div></dialog>`;
@@ -704,7 +733,12 @@ function render() {
   for (const element of app.querySelectorAll?.<HTMLDetailsElement>('[data-disclosure]') ?? []) {
     disclosureMemory.set(`${renderedScreen}:${element.dataset.disclosure}`, element.open);
   }
-  const content = view === 'connection' || (!connection && !sample) ? connectionView() : mainView();
+  const content =
+    view === 'connection' || (error && !connection && !sample)
+      ? connectionView()
+      : connection || sample
+        ? mainView()
+        : welcomeView();
   renderedScreen = view === 'main' && (connection || sample) ? `${view}:${tab}:${scope}` : view;
   app.innerHTML =
     topbar() +
@@ -854,14 +888,18 @@ async function fetchTokens() {
 }
 async function sync() {
   if (!preview?.canSync || conflictCount(preview) || busy()) return;
-  const id = preview.id;
+  const sent = preview;
   phase = 'syncing';
   error = '';
   notice = '';
   progress = { text: 'Checking fonts and preview freshness…', done: 0, total: 0 };
   render();
   try {
-    report = await rpc('sync', { planId: id });
+    report = await rpc('sync', { planId: sent.id });
+    // Re-evaluate creation against the mappings saved by this send, including partial runs.
+    for (const row of [...sent.collections, ...sent.variables, ...sent.styles]) {
+      if (choices[row.key] === 'create') delete choices[row.key];
+    }
     dialog = 'report';
     settingsBeforeSend = undefined;
     preview = undefined;
@@ -1146,6 +1184,10 @@ app.addEventListener('click', async (event) => {
         dialog = 'report';
         render();
         break;
+      case 'recreate-missing':
+        for (const row of missingTargets()) choices[row.key] = 'create';
+        await refreshPreview();
+        break;
       case 'conflicts':
       case 'issues':
         dialog = button.dataset.action;
@@ -1287,6 +1329,7 @@ app.addEventListener('click', async (event) => {
         break;
       case 'disconnect':
         await rpc('disconnect');
+        view = 'main';
         connection = undefined;
         client = undefined;
         sample = false;

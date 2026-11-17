@@ -128,6 +128,7 @@ export function materializedStyle(
   ids: Map<string, string>,
   current?: StyleState,
   preserve = true,
+  replacedBindings?: Record<string, string>,
 ): { data: Record<string, unknown>; bindings: Record<string, string>; conflict?: string } {
   const data = JSON.parse(JSON.stringify(style.data));
   const bindings: Record<string, string> = {};
@@ -141,6 +142,7 @@ export function materializedStyle(
           bindings,
           conflict: `A local binding on ${field} would lose its target property. Review the effect/paint structure or explicitly disable binding preservation.`,
         };
+      if (bindings[field] && replacedBindings?.[field] === id) continue;
       if (bindings[field] && bindings[field] !== id)
         return {
           data,
@@ -184,18 +186,19 @@ export function planSync(
 ): SyncPlan {
   const diagnostics = [...model.diagnostics];
   const collections: Operation<DesiredCollection>[] = model.collections.map((desired) => {
-    const match = target(
-      desired,
-      state.collections,
-      mappingFor(registry, model, desired.key),
-      choices[desired.key],
-    );
+    const mapping = mappingFor(registry, model, desired.key);
+    const match = target(desired, state.collections, mapping, choices[desired.key]);
     const op: Operation<DesiredCollection> = {
       key: desired.key,
       desired,
       action: match.action ?? (match.target ? 'unchanged' : 'new'),
       targetId: match.target?.id,
       reason: match.reason,
+      missingTarget:
+        !!mapping &&
+        !choices[desired.key] &&
+        !state.collections.some((item) => item.id === mapping.targetId) &&
+        !state.collections.some((item) => item.name === desired.name),
       candidates: match.candidates,
     };
     if (op.action === 'skipped') return op;
@@ -289,18 +292,20 @@ export function planSync(
         v.type === desired.type &&
         (inherited ? inherited.variableIds.includes(v.id) : v.collectionId === collection.targetId),
     );
-    const match = target(
-      desired,
-      pool,
-      mappingFor(registry, model, desired.key),
-      choices[desired.key],
-    );
+    const mapping = mappingFor(registry, model, desired.key);
+    const match = target(desired, pool, mapping, choices[desired.key]);
     const op: Operation<DesiredVariable> = {
       key: desired.key,
       desired,
       targetId: match.target?.id,
       action: match.action ?? (match.target ? 'updated' : 'new'),
       reason: match.reason,
+      missingTarget:
+        !!mapping &&
+        !choices[desired.key] &&
+        !state.variables.some((item) => item.id === mapping.targetId) &&
+        !pool.some((item) => item.name === desired.name) &&
+        !inherited,
       candidates: match.candidates,
     };
     if (op.action === 'skipped') return op;
@@ -486,11 +491,26 @@ export function planSync(
         'A style binding requires a variable that is unavailable or conflicting. Sync that variable or choose theme-specific styles.';
     }
     if (match.target && !['conflicting', 'skipped'].includes(op.action)) {
+      for (const binding of desired.bindings) {
+        if (
+          choices[binding.variable] !== 'create' ||
+          varByKey.get(binding.variable)?.action !== 'new'
+        )
+          continue;
+        const oldId = mappingFor(registry, model, binding.variable)?.targetId;
+        if (
+          oldId &&
+          match.target.bindings[binding.field] === oldId &&
+          !state.variables.some((v) => v.id === oldId)
+        )
+          (op.replacedBindings ??= {})[binding.field] = oldId;
+      }
       const material = materializedStyle(
         desired,
         ids,
         match.target,
         model.settings.preserveBindings,
+        op.replacedBindings,
       );
       if (material.conflict) {
         op.action = 'conflicting';

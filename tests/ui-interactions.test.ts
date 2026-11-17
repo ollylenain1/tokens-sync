@@ -510,3 +510,23 @@ test('GitLab setup mirrors project-path fields and validates content before savi
   await ui.click({ action: 'edit' });
   assert.match(ui.app.innerHTML, /value="team\/subgroup\/design"/);
 });
+
+test('Send consumes a staged create choice before requesting the next preview', async () => {
+  const ui = await openUI(false, {
+    created: 1,
+    updated: 0,
+    unchanged: 0,
+    skipped: 0,
+    failed: 0,
+    diagnostics: [],
+    cancelled: false,
+  });
+  const key = JSON.stringify(['collection', 'Foundations']);
+  await ui.change({ dataset: { choice: key }, value: 'create' });
+  assert.equal(ui.requests.at(-1).choices[key], 'create');
+  await ui.click({ action: 'send' });
+  await ui.click({ action: 'confirm-send' });
+  assert(ui.requests.some((request) => request.type === 'sync'));
+  assert.equal(ui.requests.at(-1).type, 'preview');
+  assert.equal(ui.requests.at(-1).choices[key], undefined);
+});

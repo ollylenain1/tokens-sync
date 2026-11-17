@@ -16,6 +16,7 @@ export interface PreviewRow {
   type: string;
   action: Action;
   reason?: string;
+  missingTarget?: boolean;
   candidates?: { id: string; name: string }[];
   targetId?: string;
   localDrift?: boolean;
@@ -56,6 +57,7 @@ function operation<T extends { name: string }>(op: Operation<T>) {
     name: op.desired.name,
     action: op.action,
     reason: op.reason,
+    missingTarget: op.missingTarget,
     candidates: op.candidates?.map((candidate) => ({ ...candidate })),
     targetId: op.targetId,
     localDrift: op.localDrift,

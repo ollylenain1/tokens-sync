@@ -202,6 +202,8 @@ export interface Operation<T> {
   desired: T;
   targetId?: string;
   reason?: string;
+  missingTarget?: boolean;
+  replacedBindings?: Record<string, string>;
   candidates?: { id: string; name: string }[];
   localDrift?: boolean;
   changes?: PropertyChange[];
