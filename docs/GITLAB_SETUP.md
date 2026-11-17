@@ -13,12 +13,14 @@ The setup fields follow the [Tokens Studio GitLab guide](https://docs.tokens.stu
 5. For private repositories, supply a personal or project access token with `read_api`. Existing `api` tokens also work. Public repositories can omit the token where GitLab permits anonymous access. See [GitLab token documentation](https://docs.gitlab.com/user/profile/personal_access_tokens/).
 6. For self-hosted GitLab, enter its HTTPS base URL. A bare hostname is upgraded to HTTPS. Existing `/api/v4` suffixes and deployment subpaths are retained without adding the suffix twice.
 
+Enterprise repository reads use Figma's main plugin fetch API. This avoids the UI iframe's `null`-origin CORS preflight, which some self-managed GitLab servers reject. The plugin still sends the token only to the configured HTTPS API host and refuses redirects. A corporate VPN, TLS certificate, login proxy or API permission can still block the connection. If the server redirects API requests to SSO, use the final API host or ask the GitLab administrator for direct API access; the plugin will not forward the token through a redirect.
+
 Test connection and Save both fetch and parse token content. A bad path does not save the connection. After saving, the token preview is prepared; saving does not apply Figma writes. Credentials are session-only unless Remember is selected.
 
 ## Verification
 
-The full local check passes 119 tests, formatting, TypeScript and bundling. New tests cover combined/split project-path identity equivalence, invalid paths, enterprise roots, personal-token headers, slash-containing branches, commit-pinned single-file pulls with sibling metadata, and named connection save/reopen behavior. Existing tests cover directory pagination, nested namespaces, numeric IDs, errors and GET-only transport.
+The full local check passes 122 tests, formatting, TypeScript and bundling. Tests cover combined/split project-path identity equivalence, invalid paths, enterprise roots, personal-token headers, slash-containing branches, commit-pinned single-file pulls with sibling metadata, named connection save/reopen behavior, guarded main-thread transport, directory pagination, nested namespaces, numeric IDs, errors and GET-only requests.
 
 Browser inspection confirmed the revised fields, GitLab guide link and editable project-path/name fields. [Setup screenshot](gitlab-setup.jpg).
 
-No authenticated GitLab or self-hosted server was exercised. Real credentials, SSO, VPN/CORS and native Figma networking still require acceptance on the intended deployment. No push, branch creation, or empty-repository initialization is implemented.
+No authenticated GitLab or self-hosted server was exercised. Real credentials, SSO, VPN and native Figma networking still require acceptance on the intended deployment. No push, branch creation, or empty-repository initialization is implemented.

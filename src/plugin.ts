@@ -15,6 +15,7 @@ import { RegistryStore } from './figma/registry';
 import { Choices, planSync } from './sync/planner';
 import { RunControl, applyPlan } from './sync/engine';
 import { previewPayload } from './ui/preview-model';
+import { readProviderRoute, PluginFetcher } from './providers/plugin-transport';
 
 figma.showUI(__html__, {
   width: 440,
@@ -52,6 +53,27 @@ figma.ui.onmessage = async (message: unknown) => {
       post({ id, ok: true, result: size });
     } catch (cause) {
       post({ id, ok: false, error: safeError(cause) });
+    }
+    return;
+  }
+  if (message.type === 'providerFetch') {
+    try {
+      const result = await readProviderRoute(
+        message.connection as Connection,
+        String(message.url),
+        fetch as unknown as PluginFetcher,
+        typeof message.accept === 'string' ? message.accept : undefined,
+      );
+      post({ id, ok: true, result });
+    } catch (cause) {
+      post({
+        id,
+        ok: false,
+        error:
+          cause instanceof SyncError
+            ? cause.message
+            : 'The configured Git host could not be reached. Check its HTTPS URL and VPN access.',
+      });
     }
     return;
   }

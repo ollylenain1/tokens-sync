@@ -26,7 +26,6 @@ async function openUI(
   const windowHandlers = new Map<string, (event: any) => void>();
   const handlers = new Map<string, (event: any) => Promise<void>>();
   const requests: any[] = [];
-  const fetchSignals: AbortSignal[] = [];
   let source: TokenProject | undefined;
   let hold = false;
   let fail = false;
@@ -73,6 +72,16 @@ async function openUI(
           result = previewPayload(plan);
         }
         if (message.type === 'resize') result = { width: message.width, height: message.height };
+        if (message.type === 'providerFetch') {
+          const response = await (providerFetch ?? (() => new Promise<Response>(() => {})))(
+            message.url,
+          );
+          result = {
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            body: await response.text(),
+          };
+        }
         if (message.type === 'sync') {
           if (!syncReport) throw new Error('No Figma writes in this UI harness');
           result = syncReport;
@@ -107,13 +116,8 @@ async function openUI(
     clearTimeout,
     AbortController,
     URL,
-    fetch:
-      providerFetch ??
-      ((_url: string, options: { signal: AbortSignal }) =>
-        new Promise((_resolve, reject) => {
-          fetchSignals.push(options.signal);
-          options.signal.addEventListener('abort', () => reject(new Error('Request stopped')));
-        })),
+    Response,
+    fetch: providerFetch,
   });
   await new Promise(setImmediate);
   const click = async (dataset: Record<string, string>) => {
@@ -130,7 +134,6 @@ async function openUI(
     windowHandlers,
     app,
     requests,
-    fetchSignals,
     click,
     change,
     search,
@@ -232,18 +235,18 @@ test('export confirmation sends only its current plan ID and closing restores pr
   assert.deepEqual(Object.keys(request).sort(), ['id', 'planId', 'type']);
 });
 
-test('connection testing exposes an enabled Stop action and aborts its provider request', async () => {
+test('connection testing exposes an enabled Stop action and cancels its bridged provider request', async () => {
   const ui = await openUI();
   await ui.click({ action: 'edit' });
   await ui.change({ name: 'owner', type: 'text', value: 'team' });
   await ui.change({ name: 'repository', type: 'text', value: 'design-tokens' });
   const pending = ui.click({ action: 'test' });
   await new Promise(setImmediate);
-  assert.equal(ui.fetchSignals.length, 1);
+  assert.equal(ui.requests.filter((request) => request.type === 'providerFetch').length, 1);
   assert.match(ui.app.innerHTML, /data-action="cancel">Stop/);
   await ui.click({ action: 'cancel' });
   await pending;
-  assert.equal(ui.fetchSignals[0].aborted, true);
+  assert.match(ui.app.innerHTML, /Fetch cancelled/);
 });
 
 test('pointer rerenders retain pointer modality and keyboard navigation restores focus indicators', async () => {

@@ -147,6 +147,41 @@ function rpc(type: string, data: Record<string, unknown> = {}): Promise<any> {
     }
   });
 }
+function repositoryClient(config: Connection): RepositoryClient {
+  if (demo) return new RepositoryClient(config);
+  const fetcher: typeof fetch = async (input, options) => {
+    const signal = options?.signal;
+    if (signal?.aborted) throw new ProviderError('CANCELLED', 'Fetch cancelled.');
+    let onAbort: (() => void) | undefined;
+    const cancelled = new Promise<never>((_, reject) => {
+      onAbort = () => reject(new ProviderError('CANCELLED', 'Fetch cancelled.'));
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      const response = await Promise.race([
+        rpc('providerFetch', {
+          connection: config,
+          url: String(input),
+          accept: (options?.headers as Record<string, string> | undefined)?.Accept,
+        }),
+        cancelled,
+      ]);
+      return new Response(response.body, {
+        status: response.status,
+        headers: response.headers,
+      });
+    } catch (cause) {
+      if (cause instanceof ProviderError) throw cause;
+      throw new ProviderError(
+        'NETWORK',
+        cause instanceof Error ? cause.message : 'The configured Git host could not be reached.',
+      );
+    } finally {
+      if (onAbort) signal?.removeEventListener('abort', onAbort);
+    }
+  };
+  return new RepositoryClient(config, fetcher);
+}
 window.addEventListener('message', (event) => {
   // Figma relays sandbox messages through pluginMessage. Its documented bridge
   // does not guarantee that MessageEvent.source is the immediate parent Window.
@@ -801,7 +836,7 @@ async function fetchTokens() {
       });
     else {
       if (!connection) throw new Error('Configure a repository first.');
-      client ??= new RepositoryClient(connection);
+      client ??= repositoryClient(connection);
       const snapshot = await client.fetch((text, done = 0, total = 0) => {
         progress = { text, done, total };
         updateProgress();
@@ -1155,7 +1190,7 @@ app.addEventListener('click', async (event) => {
         break;
       }
       case 'default-branch': {
-        const candidate = new RepositoryClient({ ...draft, branch: draft.branch || 'main' });
+        const candidate = repositoryClient({ ...draft, branch: draft.branch || 'main' });
         abort = new AbortController();
         phase = 'fetching';
         progress = { text: 'Finding default branch…', done: 0, total: 0 };
@@ -1177,7 +1212,7 @@ app.addEventListener('click', async (event) => {
         notice = '';
         error = '';
         render();
-        const candidate = new RepositoryClient(normalized);
+        const candidate = repositoryClient(normalized);
         const snapshot = await candidate.fetch((text, done = 0, total = 0) => {
           progress = { text, done, total };
           updateProgress();
@@ -1202,7 +1237,7 @@ app.addEventListener('click', async (event) => {
         break;
       }
       case 'test': {
-        const testClient = new RepositoryClient(normalizeConnection(draft));
+        const testClient = repositoryClient(normalizeConnection(draft));
         abort = new AbortController();
         phase = 'fetching';
         progress = { text: 'Checking repository access…', done: 0, total: 0 };

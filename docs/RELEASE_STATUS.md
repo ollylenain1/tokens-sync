@@ -7,7 +7,7 @@ Automated and standalone-browser results do not establish native Figma or provid
 
 ## Verified scope
 
-The full local check passes 119 tests, strict TypeScript, formatting and production bundling.
+The full local check passes 122 tests, strict TypeScript, formatting and production bundling.
 Controller tests exercise the bundled message bridge using a mock Figma API.
 Browser checks use the packaged UI with sample tokens and an in-memory document; they never write to Figma.
 Native acceptance on 15 November verified sample creation, repeat-preview idempotency, partial-failure reporting, and immediate Undo in the disposable file listed below. Other native scenarios remain open.
