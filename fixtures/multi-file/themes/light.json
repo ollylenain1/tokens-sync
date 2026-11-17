@@ -1,0 +1,14 @@
+{
+  "surface": {
+    "value": "{color.paper}",
+    "type": "color"
+  },
+  "text": {
+    "value": "{color.ink}",
+    "type": "color"
+  },
+  "shadowColor": {
+    "value": "#18223024",
+    "type": "color"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "body": {
+    "type": "typography",
+    "value": {
+      "fontFamily": "{font.family}",
+      "fontWeight": "{font.regular}",
+      "fontSize": "{font.size}",
+      "lineHeight": "{font.leading}",
+      "letterSpacing": "0px",
+      "paragraphSpacing": "8px",
+      "textCase": "none",
+      "textDecoration": "none"
+    }
+  },
+  "elevation": {
+    "type": "boxShadow",
+    "value": [
+      {
+        "x": "0px",
+        "y": "2px",
+        "blur": "8px",
+        "spread": "0px",
+        "color": "{shadowColor}",
+        "type": "dropShadow"
+      },
+      {
+        "x": "0px",
+        "y": "1px",
+        "blur": "2px",
+        "spread": "0px",
+        "color": "#00000010",
+        "type": "innerShadow"
+      }
+    ]
+  },
+  "hero": {
+    "type": "color",
+    "value": "linear-gradient(90deg, {color.brand} 0%, {surface} 100%)"
+  },
+  "soften": {
+    "type": "blur",
+    "value": "12px"
+  },
+  "outline": {
+    "type": "border",
+    "value": {
+      "color": "{text}",
+      "width": "1px",
+      "style": "solid"
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "color": {
+    "ink": {
+      "value": "#182230",
+      "type": "color"
+    },
+    "paper": {
+      "value": "#ffffff",
+      "type": "color"
+    },
+    "brand": {
+      "value": "#5265ed",
+      "type": "color"
+    }
+  },
+  "space": {
+    "small": {
+      "value": "8px",
+      "type": "spacing"
+    },
+    "medium": {
+      "value": "{space.small} * 2",
+      "type": "spacing"
+    }
+  },
+  "font": {
+    "family": {
+      "value": "Inter",
+      "type": "fontFamily"
+    },
+    "regular": {
+      "value": "Regular",
+      "type": "fontWeight"
+    },
+    "size": {
+      "value": "16px",
+      "type": "fontSize"
+    },
+    "leading": {
+      "value": "24px",
+      "type": "lineHeight"
+    }
+  },
+  "radius": {
+    "value": "8px",
+    "type": "borderRadius"
+  },
+  "enabled": {
+    "value": true,
+    "type": "boolean"
+  },
+  "opacity": {
+    "value": "80%",
+    "type": "opacity"
+  }
+}

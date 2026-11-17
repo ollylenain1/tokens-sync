@@ -1,0 +1,13 @@
+{
+  "name": "Blueprint · Token Sync",
+  "id": "blueprint-token-sync-dev",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["*"],
+    "reasoning": "Reads design-token JSON directly from the GitHub or GitLab HTTPS host explicitly configured by the designer, including self-managed enterprise hosts. No telemetry or third-party proxy."
+  }
+}

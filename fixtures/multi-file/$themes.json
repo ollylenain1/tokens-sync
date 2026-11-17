@@ -1,0 +1,32 @@
+[
+  {
+    "id": "core",
+    "name": "Default",
+    "group": "Foundations",
+    "selectedTokenSets": {
+      "core": "enabled"
+    }
+  },
+  {
+    "id": "light",
+    "name": "Light",
+    "group": "Interface",
+    "selectedTokenSets": {
+      "core": "source",
+      "themes/light": "enabled",
+      "themes/dark": "disabled",
+      "components": "enabled"
+    }
+  },
+  {
+    "id": "dark",
+    "name": "Dark",
+    "group": "Interface",
+    "selectedTokenSets": {
+      "core": "source",
+      "themes/light": "disabled",
+      "themes/dark": "enabled",
+      "components": "enabled"
+    }
+  }
+]

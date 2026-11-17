@@ -1,0 +1,31 @@
+{
+  "name": "blueprint-token-sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only Tokens Studio compatible repository sync for native Figma variables and styles",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm run typecheck && npm test && npm run build",
+    "preview": "node scripts/preview.mjs",
+    "package": "npm run build && python3 scripts/package.py"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "colorjs.io": "0.5.2"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "1.142.0",
+    "@types/node": "22.20.5",
+    "esbuild": "0.25.12",
+    "prettier": "3.6.2",
+    "typescript": "5.8.3"
+  }
+}

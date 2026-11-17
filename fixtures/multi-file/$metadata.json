@@ -1,0 +1,3 @@
+{
+  "tokenSetOrder": ["core", "themes/light", "themes/dark", "components"]
+}
