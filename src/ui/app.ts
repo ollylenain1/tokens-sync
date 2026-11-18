@@ -306,11 +306,19 @@ function providerLogo(provider: 'github' | 'gitlab') {
     : image(providerLogos.gitlab);
 }
 function welcomeView() {
-  return `<main class="main welcome"><div class="welcome-inner">
-    <div class="welcome-art" aria-hidden="true"><div class="welcome-file">tokens.json<br><b>{ }</b></div><div class="welcome-variable"><i></i>color/brand</div></div>
-    <h1>Bring your tokens<br>into Figma.</h1>
-    <p>Connect a GitHub or GitLab repository to preview your design tokens and apply them as Figma variables and styles.</p>
-    <div class="welcome-actions"><button class="primary" data-action="edit">Connect repository</button><button data-action="sample">Explore sample tokens</button></div>
+  return `<main class="main welcome" aria-labelledby="welcome-title"><div class="welcome-inner">
+    <figure class="welcome-art" aria-label="Example color tokens from tokens.json">
+      <figcaption><span aria-hidden="true">{ }</span> tokens.json</figcaption>
+      <div class="welcome-palette">
+        <div class="welcome-swatch ink"><span>color.ink</span><small>#182230</small></div>
+        <div class="welcome-swatch paper"><span>color.paper</span><small>#FFFFFF</small></div>
+        <div class="welcome-swatch brand-color"><span>color.brand</span><small>#5265ED</small></div>
+      </div>
+    </figure>
+    <div class="welcome-copy"><h1 id="welcome-title">Bring your tokens into Figma.</h1>
+      <p>Connect a GitHub or GitLab repository to preview your tokens, then apply them as Figma variables and styles.</p>
+      <div class="welcome-actions"><button class="primary" data-action="edit">Connect repository ${icon('chevron')}</button><button data-action="sample">Explore sample tokens</button></div>
+    </div>
   </div></main>`;
 }
 function connectionView() {
