@@ -60,6 +60,7 @@ export interface Settings {
   variables: boolean;
   styles: boolean;
   groups: string[];
+  excludedThemeIds?: string[];
   sets: string[];
   styleThemes: string[];
   styleStrategy: 'linked' | 'themes';
@@ -89,6 +90,7 @@ export interface ValueSpec {
   alias?: string;
 }
 export interface DesiredCollection {
+  partialSelection?: boolean;
   key: string;
   name: string;
   sourceIds: string[];

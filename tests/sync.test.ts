@@ -419,3 +419,29 @@ test('deleted collections and variables can be staged together while existing st
     styleIds,
   );
 });
+
+test('a partial theme send updates the selected mode and retains drift detection for its sibling', async () => {
+  const mock = mockFigma();
+  await run(mock);
+  const collection = mock.collections.find((c) => c.name === 'Interface');
+  const dark = collection.modes.find((m: any) => m.name === 'Dark').modeId;
+  const light = collection.modes.find((m: any) => m.name === 'Light').modeId;
+  const variable = mock.variables.find((v) => v.name === 'shadowColor');
+  const localDark = { r: 1, g: 0, b: 1, a: 1 };
+  variable.setValueForMode(dark, localDark);
+  const changed = structuredClone(fixture);
+  changed['themes/light'].shadowColor.value = '#ffffff';
+  const { plan, report } = await run(mock, changed, {
+    ...defaultSettings,
+    excludedThemeIds: ['dark'],
+  });
+  assert.equal(report.failed, 0);
+  assert.deepEqual(
+    plan.collections.find((c) => c.desired.name === 'Interface')?.desired.modes.map((m) => m.name),
+    ['Light'],
+  );
+  assert.deepEqual(variable.valuesByMode[light], { r: 1, g: 1, b: 1, a: 1 });
+  assert.deepEqual(variable.valuesByMode[dark], localDark);
+  const full = await preview(mock, changed);
+  assert.equal(full.variables.find((v) => v.targetId === variable.id)?.action, 'conflicting');
+});

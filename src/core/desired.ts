@@ -113,12 +113,14 @@ export async function buildDesired(
     settings.rootFontSize > 1000
   )
     throw new SyncError('SETTINGS', 'Root font size must be between 0 and 1000 px.');
-  const diagnostics = [...project.diagnostics];
+  const excluded = new Set(settings.excludedThemeIds);
+  const diagnostics = project.diagnostics.filter((d) => !d.theme || !excluded.has(d.theme));
   const themes = project.themes.filter(
-    (t) => !settings.groups.length || settings.groups.includes(t.group),
+    (t) => (!settings.groups.length || settings.groups.includes(t.group)) && !excluded.has(t.id),
   );
   const resolvers = themes.map((theme) => new TokenResolver(project, theme, settings));
   const collections = [...new Set(themes.map((t) => t.group))].map((group) => ({
+    partialSelection: project.themes.some((t) => t.group === group && excluded.has(t.id)),
     key: keyOf('collection', group),
     name: group,
     sourceIds: [
@@ -352,10 +354,22 @@ export async function buildDesired(
     const key = keyOf(style.group, style.path, style.kind);
     groupedStyles.set(key, [...(groupedStyles.get(key) ?? []), style]);
   }
+  // Keep linked vs. theme-specific style identities stable on a partial group send.
+  const partialGroups = collections.filter((c) => c.partialSelection).map((c) => c.name);
+  const fullGroupStyles =
+    partialGroups.length && settings.styles && settings.styleStrategy === 'linked'
+      ? (await buildDesired(project, { ...settings, groups: partialGroups, excludedThemeIds: [] }))
+          .styles
+      : [];
+  const linkedKeys = new Set(fullGroupStyles.filter((s) => s.theme === 'linked').map((s) => s.key));
   const styles: DesiredStyle[] = [];
   for (const candidates of groupedStyles.values()) {
     const shared =
       settings.styleStrategy === 'linked' &&
+      (!partialGroups.includes(candidates[0].group) ||
+        linkedKeys.has(
+          keyOf('style', candidates[0].group, 'linked', candidates[0].kind, candidates[0].path),
+        )) &&
       candidates.every(
         (s) =>
           styleSignature(s.data, s.bindings) ===

@@ -1940,31 +1940,33 @@ button:active:not(:disabled) {
   margin: 0 0 14px;
   color: var(--muted);
 }
-.send-outputs {
-  display: flex;
-  gap: 22px;
-  margin: 16px 0;
-}
 .send-groups {
   border: 1px solid var(--line);
   border-radius: 8px;
-  overflow: hidden;
+  max-height: 52vh;
+  overflow: auto;
   margin-bottom: 16px;
 }
 .send-group-heading {
   background: var(--soft);
-  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
   font-weight: 600;
 }
 .send-groups .inclusion-row {
-  border-top: 1px solid var(--line);
-  padding: 12px;
+  padding: 3px 12px;
+  min-height: 25px;
 }
-.send-groups small {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-  margin-top: 4px;
+.send-groups .send-group-heading {
+  padding-block: 8px;
+}
+.send-group {
+  margin-block: 4px;
+}
+.send-groups .send-option {
+  padding-left: 30px;
+}
+.send-groups input {
+  accent-color: #7966ff;
 }
 .dialog-footer {
   border-top: 1px solid var(--line);

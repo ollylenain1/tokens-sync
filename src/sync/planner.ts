@@ -613,6 +613,7 @@ export function planSync(
       ([key, entry]) =>
         entry.source === model.identity &&
         entry.fileIdentity === state.identity &&
+        !byGroup.get(entry.group)?.desired.partialSelection &&
         !allKeys.has(key) &&
         !claimedIds.has(entry.targetId) &&
         (!model.settings.groups.length || model.settings.groups.includes(entry.group)),

@@ -223,8 +223,9 @@ test('conflict shortcut reveals collection conflicts even when search and browsi
 test('export confirmation sends only its current plan ID and closing restores previous choices', async () => {
   const ui = await openUI();
   await ui.click({ action: 'send' });
-  await ui.change({ dataset: { sendOutput: 'variables' }, type: 'checkbox', checked: false });
-  assert.equal(ui.requests.at(-1).settings.variables, false);
+  await ui.change({ dataset: { sendTheme: 'dark' }, type: 'checkbox', checked: false });
+  assert.deepEqual(ui.requests.at(-1).settings.excludedThemeIds, ['dark']);
+  assert.match(ui.app.innerHTML, /data-group="Interface" data-mixed/);
   assert.equal(ui.requests.filter((r) => r.type === 'sync').length, 0);
   await ui.click({ action: 'close-dialog' });
   await ui.change({ dataset: { group: 'Foundations' }, checked: false });
@@ -293,7 +294,7 @@ test('table-first UI moves export choices into a dialog and removes review, auto
   assert.equal(ui.requests.at(-1).settings.variables, false);
   assert.equal(ui.requests.at(-1).settings.styles, true);
   assert.equal(ui.requests.filter((r) => r.type === 'sync').length, 0);
-  assert.match(ui.app.innerHTML, /2 of 2 collections selected/);
+  assert.match(ui.app.innerHTML, /All 2 theme groups, 3 options/);
   await ui.click({ action: 'close-dialog' });
   assert.equal(ui.requests.at(-1).settings.variables, true);
   assert.equal(ui.requests.at(-1).settings.styles, true);

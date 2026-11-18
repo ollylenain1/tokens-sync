@@ -631,19 +631,29 @@ function sendDialogView() {
   if (dialog === 'report')
     return `<dialog class="sync-dialog result-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Last sync result</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close result">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${reportView()}</div></dialog>`;
   const groups = collectionGroups();
-  return `<dialog class="sync-dialog" aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Choose the collections and outputs to send. Existing items update in place; new items are added.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<div class="send-outputs"><label class="check"><input type="checkbox" data-send-output="variables"${checked(settings.variables)}${disabled()}>Variables</label><label class="check"><input type="checkbox" data-send-output="styles"${checked(settings.styles)}${disabled()}>Styles</label></div><section class="send-groups" aria-label="Collections included in sync"><div class="send-group-heading">${groups.filter((g) => isIncluded(settings.groups, g)).length} of ${groups.length} collections selected</div>${groups
-    .map(
-      (group) =>
-        `<label class="inclusion-row"><input type="checkbox" aria-label="Include ${esc(group)} in sync" data-group="${esc(group)}"${checked(isIncluded(settings.groups, group))}${disabled()}><span>${esc(group)}<small>${esc(
-          project?.themes
-            .filter((t) => t.group === group)
-            .map((t) => t.name)
-            .join(' · '),
-        )}</small></span></label>`,
-    )
-    .join(
-      '',
-    )}</section>${progressView()}${errorView()}${preview ? `<p class="small">${changeCount(preview)} pending changes across the selected collections.</p>` : ''}${conflictCount(preview) ? '<p class="error-color">Resolve conflicts before sending.</p><button data-action="conflicts">Review conflicts</button>' : ''}${omittedCount(preview) ? `<p class="warning">${omittedCount(preview)} tokens will be omitted. <button class="quiet tiny" data-action="issues">Review omissions</button></p>` : ''}</div><footer class="dialog-footer">${phase === 'syncing' ? '<button data-action="cancel">Stop sync</button>' : ''}<button class="primary" data-action="confirm-send"${disabled(demo || busy() || !preview?.canSync || conflictCount(preview) > 0 || (!settings.variables && !settings.styles))}>${busy() ? 'Preparing…' : demo ? 'Preview only' : sample ? 'Apply sample to this file' : 'Send to Figma'}</button></footer></dialog>`;
+  const themes = project?.themes ?? [];
+  const selectedIds = new Set(
+    themes
+      .filter(
+        (t) => isIncluded(settings.groups, t.group) && !settings.excludedThemeIds?.includes(t.id),
+      )
+      .map((t) => t.id),
+  );
+  function selectionState(count: number, total: number) {
+    return (
+      checked(count > 0 && count === total) +
+      (count > 0 && count < total ? ' data-mixed' : '') +
+      disabled()
+    );
+  }
+  const tree = groups
+    .map((group) => {
+      const options = themes.filter((t) => t.group === group);
+      const count = options.filter((t) => selectedIds.has(t.id)).length;
+      return `<div class="send-group"><label class="inclusion-row"><input type="checkbox" data-group="${esc(group)}"${selectionState(count, options.length)}><span>${esc(group)}</span></label>${options.map((t) => `<label class="inclusion-row send-option"><input type="checkbox" data-send-theme="${esc(t.id)}"${checked(selectedIds.has(t.id))}${disabled()}><span>${esc(t.name)}</span></label>`).join('')}</div>`;
+    })
+    .join('');
+  return `<dialog class="sync-dialog" aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Pick the theme groups and options to send. Existing items are updated in place, and new ones are added.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<section class="send-groups" aria-label="Theme groups and options" data-scroll="send-options"><label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>${tree}</section>${progressView()}${errorView()}${preview ? `<p class="small">${changeCount(preview)} pending changes across the selected collections.</p>` : ''}${conflictCount(preview) ? '<p class="error-color">Resolve conflicts before sending.</p><button data-action="conflicts">Review conflicts</button>' : ''}${omittedCount(preview) ? `<p class="warning">${omittedCount(preview)} tokens will be omitted. <button class="quiet tiny" data-action="issues">Review omissions</button></p>` : ''}</div><footer class="dialog-footer">${phase === 'syncing' ? '<button data-action="cancel">Stop sync</button>' : ''}<button class="primary" data-action="confirm-send"${disabled(demo || !selectedIds.size || busy() || !preview?.canSync || conflictCount(preview) > 0 || (!settings.variables && !settings.styles))}>${busy() ? 'Preparing…' : demo ? 'Preview only' : sample ? 'Apply sample to this file' : 'Send to Figma'}</button></footer></dialog>`;
 }
 async function closeDialog() {
   if (dialog === 'branch') {
@@ -673,9 +683,12 @@ async function openSend(output?: 'variables' | 'styles') {
   settingsBeforeSend = structuredClone(settings);
   dialog = 'send';
   sendMenuOpen = false;
-  if (output) {
-    settings.variables = output === 'variables';
-    settings.styles = output === 'styles';
+  if (
+    settings.variables !== (output !== 'styles') ||
+    settings.styles !== (output !== 'variables')
+  ) {
+    settings.variables = output !== 'styles';
+    settings.styles = output !== 'variables';
     await refreshPreview();
   } else render();
 }
@@ -713,7 +726,8 @@ const focusAttributes = [
   'data-skip',
   'data-repository',
   'data-setting',
-  'data-send-output',
+  'data-send-all',
+  'data-send-theme',
   'data-set',
   'data-style-theme',
   'data-parent',
@@ -768,6 +782,8 @@ function render() {
     announcements.textContent = announcement;
   const modal = app.querySelector<HTMLDialogElement>('dialog');
   if (modal) {
+    for (const input of modal.querySelectorAll<HTMLInputElement>('[data-mixed]'))
+      input.indeterminate = true;
     modal.showModal?.();
     modal.addEventListener('cancel', (event) => {
       event.preventDefault();
@@ -879,6 +895,7 @@ async function connectRepository(input: Connection) {
   choices = {};
   preview = undefined;
   settings.groups = [];
+  settings.excludedThemeIds = [];
   settings.sets = [];
   settings.styleThemes = [];
   resetBrowse();
@@ -998,17 +1015,28 @@ app.addEventListener('change', async (event) => {
   try {
     if (input.name && (input.name === 'name' || input.name in draft))
       (draft as any)[input.name] = input.type === 'checkbox' ? input.checked : input.value;
-    if (input.dataset.sendOutput) {
-      settings[input.dataset.sendOutput as 'variables' | 'styles'] = input.checked;
-      await refreshPreview();
-    }
-    if (input.dataset.group && project) {
-      settings.groups = toggleList(
-        settings.groups,
-        [...new Set(project.themes.map((t) => t.group))],
-        input.dataset.group,
-        input.checked,
-      );
+    if (
+      project &&
+      (input.dataset.sendAll || input.dataset.group || input.dataset.sendTheme !== undefined)
+    ) {
+      const { themes } = project;
+      const selected = themes.filter((theme) => {
+        const affected =
+          input.dataset.sendAll ||
+          input.dataset.group === theme.group ||
+          input.dataset.sendTheme === theme.id;
+        return affected
+          ? input.checked
+          : isIncluded(settings.groups, theme.group) &&
+              !settings.excludedThemeIds?.includes(theme.id);
+      });
+      const groups = [...new Set(selected.map((t) => t.group))];
+      settings.groups =
+        groups.length === collectionGroups().length ? [] : groups.length ? groups : ['__none__'];
+      const ids = new Set(selected.map((t) => t.id));
+      settings.excludedThemeIds = themes
+        .filter((t) => groups.includes(t.group) && !ids.has(t.id))
+        .map((t) => t.id);
       await refreshPreview();
     }
     if (input.dataset.choice) {

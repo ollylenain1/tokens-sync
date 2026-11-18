@@ -12,6 +12,7 @@ import {
   equal,
   keyOf,
   registryKey,
+  record,
   safeError,
   tick,
 } from '../core/model';
@@ -296,7 +297,12 @@ export async function applyPlan(
             'VERIFY_VARIABLE',
             'Figma did not retain the expected variable values. Retry with a fresh preview.',
           );
-        save(op, 'variable', variable.id, desiredValues);
+        const previous = registry.entries[registryKey(plan.model.identity, op.key)];
+        const baseline =
+          previous?.targetId === variable.id && record(previous.lastValue)
+            ? previous.lastValue
+            : {};
+        save(op, 'variable', variable.id, { ...baseline, ...desiredValues });
         report[
           op.action === 'new' ? 'created' : op.action === 'updated' ? 'updated' : 'unchanged'
         ]++;
