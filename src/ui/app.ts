@@ -88,7 +88,8 @@ let progress = { text: '', done: 0, total: 0 },
 let recoveryField = '';
 let repositoryURL = '';
 let windowSize = savedWindowSize(undefined);
-let dialog: 'send' | 'report' | 'issues' | 'conflicts' | undefined;
+let branchDraft = '';
+let dialog: 'branch' | 'send' | 'report' | 'issues' | 'conflicts' | undefined;
 let diagnosticPath = '';
 let sendMenuOpen = false;
 let settingsBeforeSend: Settings | undefined;
@@ -610,6 +611,8 @@ function missingTargets() {
 }
 function sendDialogView() {
   if (!dialog) return '';
+  if (dialog === 'branch')
+    return `<dialog class="sync-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Switch branch</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close branch switcher"${disabled()}>${icon('close')}</button></header><form id="branch-form"><div class="dialog-body"><label class="field"><span>Branch name</span><input id="branch-name" value="${esc(branchDraft)}" required autocapitalize="off" autocomplete="off" spellcheck="false"${disabled()}></label>${progressView()}${error ? `<div class="notice error" role="alert">${esc(error)}</div>` : ''}</div><footer class="dialog-footer">${busy() ? '<button type="button" data-action="cancel">Stop</button>' : '<button type="button" data-action="close-dialog">Cancel</button>'}<button type="submit" class="primary" data-action="switch-branch"${disabled()}>Switch branch</button></footer></form></dialog>`;
   if (dialog === 'issues' || dialog === 'conflicts') {
     const conflicts = [
       ...(preview?.collections ?? []),
@@ -643,6 +646,15 @@ function sendDialogView() {
     )}</section>${progressView()}${errorView()}${preview ? `<p class="small">${changeCount(preview)} pending changes across the selected collections.</p>` : ''}${conflictCount(preview) ? '<p class="error-color">Resolve conflicts before sending.</p><button data-action="conflicts">Review conflicts</button>' : ''}${omittedCount(preview) ? `<p class="warning">${omittedCount(preview)} tokens will be omitted. <button class="quiet tiny" data-action="issues">Review omissions</button></p>` : ''}</div><footer class="dialog-footer">${phase === 'syncing' ? '<button data-action="cancel">Stop sync</button>' : ''}<button class="primary" data-action="confirm-send"${disabled(demo || busy() || !preview?.canSync || conflictCount(preview) > 0 || (!settings.variables && !settings.styles))}>${busy() ? 'Preparing…' : demo ? 'Preview only' : sample ? 'Apply sample to this file' : 'Send to Figma'}</button></footer></dialog>`;
 }
 async function closeDialog() {
+  if (dialog === 'branch') {
+    dialog = undefined;
+    error = '';
+    recoveryField = '';
+    phase = preview ? 'ready' : 'connected';
+    render();
+    focusAction('open-branch');
+    return;
+  }
   if ((dialog === 'issues' || dialog === 'conflicts') && settingsBeforeSend) {
     dialog = 'send';
     render();
@@ -679,10 +691,10 @@ function mainView() {
   const c = connection;
   return `<main class="main workspace companion-workspace"><section class="source-row"><span class="source-icon">${icon('git')}</span><div class="source-text"><button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.name || c?.repository)}</span>${icon('chevron')}</button></div>${settingsMenu()}</section>
   ${tab !== 'variables' ? `<div class="secondary-heading"><button class="quiet tiny" data-tab="variables">← Variables</button><strong>Styles</strong></div>` : ''}${browserToolbar()}
-  <div class="feedback">${progressView()}${errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}</div>
+  <div class="feedback">${dialog === 'branch' ? '' : progressView() + errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}</div>
   <section class="browser-content" aria-label="${tab === 'styles' ? 'Styles' : 'Variables'}" aria-busy="${busy()}">${tab === 'variables' ? variableView() : styleView()}</section>
   ${issues || conflicts ? `<div class="export-warnings">${conflicts ? `<button class="quiet error-color" data-action="conflicts">${conflicts} conflicts · Review</button>` : ''}${issues ? `<button class="quiet" data-action="issues">Export warnings <span class="count-pill">${issues}</span> ${icon('chevron')}</button>` : ''}</div>` : ''}
-  </main><footer class="footer workspace-footer companion-footer"><div class="footer-row">${busy() ? `<button data-action="cancel"${disabled(phase === 'previewing')}>Stop</button>` : `<div class="source-actions"><button class="branch-button" data-action="edit" aria-label="${sample ? 'Connect repository' : 'Edit repository connection'}">${icon('branch')}<span>${esc(sample ? 'Sample' : (c?.branch ?? 'main'))}</span>${icon('chevron')}</button><button class="icon-button" data-action="fetch" title="${sample ? 'Reload sample' : 'Fetch updates'}" aria-label="${sample ? 'Reload sample' : 'Fetch updates'}">${icon('refresh')}</button></div>`}<div class="send-actions"><button class="sync-button" data-action="send"${disabled(busy() || !project)}>${icon('arrow')}${demo ? 'Export preview' : 'Send to Figma'}</button><button class="icon-button" data-action="send-menu" aria-label="Choose output to send" aria-expanded="${sendMenuOpen}"${disabled(busy() || !project)}>${icon('chevron')}</button>${sendMenuOpen ? '<div class="menu send-menu"><button data-action="send-variables">Send variables only</button><button data-action="send-styles">Send styles only</button></div>' : ''}</div></div></footer>${sendDialogView()}`;
+  </main><footer class="footer workspace-footer companion-footer"><div class="footer-row">${busy() ? `<button data-action="cancel"${disabled(phase === 'previewing')}>Stop</button>` : `<div class="source-actions"><button class="branch-button" data-action="${c?.provider === 'gitlab' && !sample ? 'open-branch' : 'edit'}" aria-label="${sample ? 'Connect repository' : c?.provider === 'gitlab' ? 'Switch branch' : 'Edit repository connection'}">${icon('branch')}<span>${esc(sample ? 'Sample' : (c?.branch ?? 'main'))}</span>${icon('chevron')}</button><button class="icon-button" data-action="fetch" title="${sample ? 'Reload sample' : 'Fetch updates'}" aria-label="${sample ? 'Reload sample' : 'Fetch updates'}">${icon('refresh')}</button></div>`}<div class="send-actions"><button class="sync-button" data-action="send"${disabled(busy() || !project)}>${icon('arrow')}${demo ? 'Export preview' : 'Send to Figma'}</button><button class="icon-button" data-action="send-menu" aria-label="Choose output to send" aria-expanded="${sendMenuOpen}"${disabled(busy() || !project)}>${icon('chevron')}</button>${sendMenuOpen ? '<div class="menu send-menu"><button data-action="send-variables">Send variables only</button><button data-action="send-styles">Send styles only</button></div>' : ''}</div></div></footer>${sendDialogView()}`;
 }
 let renderedScreen = '';
 const scrollMemory = new Map<string, { top: number; left: number }>();
@@ -845,6 +857,38 @@ async function refreshPreview(includeProject = false) {
   error = '';
   render();
 }
+async function connectRepository(input: Connection) {
+  const normalized = normalizeConnection(input);
+  abort = new AbortController();
+  phase = 'fetching';
+  progress = { text: 'Checking repository access…', done: 0, total: 0 };
+  notice = '';
+  error = '';
+  render();
+  const candidate = repositoryClient(normalized);
+  const snapshot = await candidate.fetch((text, done = 0, total = 0) => {
+    progress = { text, done, total };
+    updateProgress();
+  }, abort.signal);
+  const loadedProject = parseRepository(snapshot);
+  await rpc('saveConnection', { connection: normalized });
+  connection = normalized;
+  client = candidate;
+  sample = false;
+  project = loadedProject;
+  choices = {};
+  preview = undefined;
+  settings.groups = [];
+  settings.sets = [];
+  settings.styleThemes = [];
+  resetBrowse();
+  dialog = undefined;
+  view = 'main';
+  phase = 'connected';
+  abort = undefined;
+  await refreshPreview(true);
+  render();
+}
 async function fetchTokens() {
   if (busy()) return;
   preview = undefined;
@@ -920,6 +964,7 @@ app.addEventListener('input', (event) => {
   }
   if (input.name && (input.name === 'name' || input.name in draft))
     (draft as any)[input.name] = input.type === 'checkbox' ? input.checked : input.value;
+  if (input.id === 'branch-name') branchDraft = input.value;
   if (input.id === 'repository-url') repositoryURL = input.value;
   if (input.id === 'token-search') {
     search = input.value;
@@ -1248,38 +1293,28 @@ app.addEventListener('click', async (event) => {
         render();
         break;
       }
-      case 'connect': {
-        const normalized = normalizeConnection(draft);
-        abort = new AbortController();
-        phase = 'fetching';
-        progress = { text: 'Checking repository access…', done: 0, total: 0 };
-        notice = '';
+      case 'open-branch':
+        if (!connection || connection.provider !== 'gitlab') break;
+        branchDraft = connection.branch;
         error = '';
+        notice = '';
+        dialog = 'branch';
         render();
-        const candidate = repositoryClient(normalized);
-        const snapshot = await candidate.fetch((text, done = 0, total = 0) => {
-          progress = { text, done, total };
-          updateProgress();
-        }, abort.signal);
-        const loadedProject = parseRepository(snapshot);
-        await rpc('saveConnection', { connection: normalized });
-        connection = normalized;
-        client = candidate;
-        sample = false;
-        project = loadedProject;
-        choices = {};
-        preview = undefined;
-        settings.groups = [];
-        settings.sets = [];
-        settings.styleThemes = [];
-        resetBrowse();
-        view = 'main';
-        phase = 'connected';
-        abort = undefined;
-        await refreshPreview(true);
-        render();
+        app.querySelector<HTMLInputElement>('#branch-name')?.select();
         break;
-      }
+      case 'switch-branch':
+        event.preventDefault();
+        if (!connection || dialog !== 'branch') break;
+        if (branchDraft.trim() === connection.branch) {
+          await closeDialog();
+          break;
+        }
+        await connectRepository({ ...connection, branch: branchDraft });
+        focusAction('open-branch');
+        break;
+      case 'connect':
+        await connectRepository(draft);
+        break;
       case 'test': {
         const testClient = repositoryClient(normalizeConnection(draft));
         abort = new AbortController();
