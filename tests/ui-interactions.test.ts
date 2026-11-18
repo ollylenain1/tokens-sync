@@ -523,7 +523,10 @@ test('GitLab setup mirrors project-path fields and validates content before savi
   assert.match(ui.app.innerHTML, /class="branch-button" data-action="open-branch"/);
   await ui.click({ action: 'open-branch' });
   assert.match(ui.app.innerHTML, /id="branch-options"/);
-  assert.match(ui.app.innerHTML, /main \(default\)/);
+  assert.match(
+    ui.app.innerHTML,
+    /class="branch-option-name">main<\/span> <span class="branch-default">Default<\/span>/,
+  );
   assert.match(ui.app.innerHTML, /data-branch="feature\/colors" aria-current="true"/);
   assert.doesNotMatch(ui.app.innerHTML, /id="connection-form"/);
   await ui.click({ action: 'choose-branch', branch: 'missing' });

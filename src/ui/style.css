@@ -2301,22 +2301,45 @@ button:active:not(:disabled) {
   position: relative;
 }
 
+.companion-footer .source-actions > .branch-button[aria-expanded='true'] {
+  background: var(--soft);
+}
+
+.branch-button[aria-expanded='true'] > .icon:last-child {
+  transform: rotate(-90deg);
+}
+
 .branch-menu {
   z-index: 3;
   inset: auto auto calc(100% + 7px) 0;
-  width: max-content;
-  min-width: 100%;
-  max-width: min(320px, calc(100vw - 24px));
+  width: min(264px, calc(100vw - 24px));
   max-height: min(260px, 50vh);
   overflow: auto;
+  padding: 4px;
 }
 
-.branch-menu button {
-  display: flex;
-  align-items: center;
+.footer-row .branch-menu button {
+  justify-content: flex-start;
   gap: 8px;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: transparent;
+  font-size: var(--type-ui);
+  line-height: 1.4;
+}
+
+.branch-menu .branch-option[aria-current='true'] {
+  background: var(--soft);
+  font-weight: 600;
+}
+
+.footer-row .branch-menu button:hover {
+  background: var(--hover);
+}
+
+.footer-row .branch-menu button:focus-visible {
+  outline-offset: -2px;
 }
 
 .branch-menu p {
@@ -2328,6 +2351,21 @@ button:active:not(:disabled) {
 .branch-check {
   display: inline-flex;
   flex: 0 0 16px;
+  color: var(--accent);
+}
+
+.branch-option-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.branch-default {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--type-secondary);
+  font-weight: 400;
 }
 
 .diagnostics h3 {

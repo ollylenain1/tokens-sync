@@ -702,7 +702,7 @@ function branchMenuView() {
   const { result, failed } = branchMenu;
   const active = connection.branch;
   const names = [...new Set([active, ...(result?.names ?? [])])];
-  return `<div class="menu branch-menu" id="branch-options" aria-label="Repository branches" data-scroll="branches">${names.map((name) => `<button data-action="choose-branch" data-branch="${esc(name)}"${name === active ? ' aria-current="true"' : ''}><span class="branch-check">${name === active ? icon('check') : ''}</span><span>${esc(name)}${name === result?.defaultBranch ? ' (default)' : ''}</span></button>`).join('')}${failed ? '<p role="status">Could not load branches.</p><button data-action="manual-branch">Enter branch name…</button>' : !result ? '<p role="status">Loading branches…</p>' : ''}</div>`;
+  return `<div class="menu branch-menu" id="branch-options" aria-label="Repository branches" data-scroll="branches">${names.map((name) => `<button class="branch-option" data-action="choose-branch" data-branch="${esc(name)}"${name === active ? ' aria-current="true"' : ''} title="${esc(name)}"><span class="branch-check" aria-hidden="true">${name === active ? icon('check') : ''}</span><span class="branch-option-name">${esc(name)}</span>${name === result?.defaultBranch ? ' <span class="branch-default">Default</span>' : ''}</button>`).join('')}${failed ? '<p role="status">Could not load branches.</p><button data-action="manual-branch">Enter branch name…</button>' : !result ? '<p role="status">Loading branches…</p>' : ''}</div>`;
 }
 function mainView() {
   const groups = collectionGroups();
