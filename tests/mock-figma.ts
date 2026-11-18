@@ -45,7 +45,10 @@ export function mockFigma(
       name,
       modes,
       defaultModeId: modes[0].modeId,
-      variableIds: parent ? [...parent.variableIds] : [],
+      ownedVariableIds: [],
+      get variableIds() {
+        return parent ? parent.variableIds : this.ownedVariableIds;
+      },
       remote: false,
       isExtension: !!parent,
       hiddenFromPublishing: false,
@@ -98,16 +101,28 @@ export function mockFigma(
           extension.variableOverrides[variable.id][mode] = structuredClone(value);
         } else variable.valuesByMode[mode] = structuredClone(value);
       },
-      valuesByModeForCollectionAsync: async (c: any) =>
-        c.isExtension
-          ? Object.fromEntries(
-              c.modes.map((m: any) => [
-                m.modeId,
-                c.variableOverrides[variable.id]?.[m.modeId] ??
-                  variable.valuesByMode[m.parentModeId],
-              ]),
-            )
-          : variable.valuesByMode,
+      removeOverrideForMode: (mode: string) => {
+        const extension = collections.find(
+          (c) => c.isExtension && c.modes.some((m: any) => m.modeId === mode),
+        );
+        if (extension?.variableOverrides[variable.id]) {
+          delete extension.variableOverrides[variable.id][mode];
+          writes++;
+        }
+      },
+      valuesByModeForCollectionAsync: async (c: any): Promise<Record<string, unknown>> => {
+        if (!c.isExtension) return variable.valuesByMode;
+        const parent = collections.find(
+          (collection) => collection.id === c.parentVariableCollectionId,
+        );
+        const inherited = await variable.valuesByModeForCollectionAsync(parent);
+        return Object.fromEntries(
+          c.modes.map((m: any) => [
+            m.modeId,
+            c.variableOverrides[variable.id]?.[m.modeId] ?? inherited[m.parentModeId],
+          ]),
+        );
+      },
       remove: () => {
         throw new Error('Deletion is forbidden in this test');
       },

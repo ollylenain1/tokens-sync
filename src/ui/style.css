@@ -2329,3 +2329,26 @@ button:active:not(:disabled) {
   display: inline-flex;
   flex: 0 0 16px;
 }
+
+.diagnostics h3 {
+  margin: 12px 0 4px;
+  font-size: var(--type-secondary);
+}
+
+.diagnostic p {
+  margin: 4px 0;
+}
+
+.source-details {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--soft);
+  border-radius: 6px;
+}
+
+.export-review-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}

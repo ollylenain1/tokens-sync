@@ -72,8 +72,7 @@ const navigationHistory: {
 let scope = '',
   searchOpen = false,
   browseFilter = 'all',
-  menuOpen = false,
-  diagnosticsOpen = false;
+  menuOpen = false;
 const expandedRows = new Set<string>();
 let error = '',
   notice = '',
@@ -100,7 +99,7 @@ function closeBranchMenu() {
   branchMenu = undefined;
 }
 let dialog: 'branch' | 'send' | 'report' | 'issues' | 'conflicts' | undefined;
-let diagnosticPath = '';
+let openDiagnosticDetails = '';
 let sendMenuOpen = false;
 let settingsBeforeSend: Settings | undefined;
 let nextId = 0;
@@ -421,17 +420,17 @@ function browseEmpty(kind: 'variables' | 'styles') {
         : 'No changes in this collection',
       previewStatus(preview) === 'Up to date'
         ? `Every included ${kind === 'variables' ? 'variable' : 'style'} matches the source.`
-        : 'There are no pending changes here. Check export warnings for omitted items.',
+        : 'There are no pending changes here. Review the export for skipped items.',
       '<button data-browse-filter="all">Show all tokens</button>',
     );
   return emptyView(
     search ? 'No matching tokens' : `No ${kind} in this collection`,
     search
       ? `No results for “${search}”. Try another name or collection.`
-      : 'Check export warnings for conversion notes.',
+      : 'Review the export to see how tokens were converted.',
     search
       ? '<button data-action="clear-search">Clear search</button>'
-      : '<button data-action="issues">View conversion notes</button>',
+      : '<button data-action="issues">Review export</button>',
   );
 }
 function valueView(value: import('../core/model').Literal | undefined, alias?: string) {
@@ -560,37 +559,36 @@ function styleView() {
     )
     .join('')}</tbody></table>${moreView(rows.length)}</div>`;
 }
-function diagnosticTokenContext(hasOutput: boolean) {
-  if (!preview || !diagnosticPath) return '';
-  const diagnostics = groupDiagnostics(
-    preview.diagnostics.filter((item) => item.token === diagnosticPath),
-  );
-  if (!diagnostics.length) return '';
+function sourceDetails(path: string, code: string) {
   const definitions = Object.entries(project?.sets ?? {}).flatMap(([set, tokens]) =>
-    tokens.filter((token) => token.path === diagnosticPath).map((token) => ({ set, token })),
+    tokens.filter((token) => token.path === path).map((token) => ({ set, token })),
   );
-  return `<section class="notice info" aria-label="Source token details"><strong>${esc(diagnosticPath)}</strong><p>${hasOutput ? 'Some output exists for this token. Review the conversion notes for properties that are omitted or approximated.' : 'No output is planned for this token. It is omitted from this sync; see the conversion reason below.'}</p>${diagnostics.map((item) => `<p><strong>${esc(item.level)} · ${esc(item.code)}</strong> ${item.messages.map((message) => esc(message)).join(' ')}</p>`).join('')}${definitions.length ? `<details><summary>Source definitions · ${definitions.length}</summary>${definitions.map(({ set, token }) => `<p>${esc(set)} · ${esc(token.type)}</p><pre class="source-token-value">${esc(JSON.stringify(token.value, null, 2))}</pre>`).join('')}</details>` : ''}${diagnostics.some((item) => item.code === 'MISSING_FONT') ? '<button class="quiet tiny" data-action="check-fonts">Check fonts again</button>' : ''}</section>`;
+  return `<div class="source-details" aria-label="Source details"><p class="small">Code <code>${esc(code)}</code></p>${definitions.map(({ set, token }) => `<p>${esc(set)} · ${esc(token.type)}</p><pre class="source-token-value">${esc(JSON.stringify(token.value, null, 2))}</pre>`).join('')}</div>`;
 }
 function diagnosticsView() {
   if (!preview) return '';
   const grouped = groupDiagnostics(preview.diagnostics);
+  if (!grouped.length && !preview.missing.length) return '<p>No export issues found.</p>';
   return `${(['error', 'warning', 'info'] as const)
     .map((level) => {
       const entries = grouped.filter((d) => d.level === level);
       if (!entries.length) return '';
-      const label = level === 'info' ? 'conversion note' : level === 'error' ? 'error' : 'warning';
-      return `<details class="diagnostics" data-disclosure="${level}"${diagnosticsOpen ? ' open' : ''}><summary>${entries.length} ${label}${entries.length === 1 ? '' : 's'}</summary>${entries
+      const label =
+        level === 'info' ? 'Conversion notes' : level === 'error' ? 'Errors' : 'Warnings';
+      return `<section class="diagnostics"><h3>${label}</h3>${entries
         .map((d) => {
           const modes = d.themes.map(
             (id) => project?.themes.find((theme) => theme.id === id)?.name ?? id,
           );
-          return `<div class="diagnostic ${level}"><strong>${esc(d.token ?? d.code)}${modes.length ? ' · ' + esc(modes.join(', ')) : ''}</strong>${d.messages.map((message) => `<p>${esc(message)}</p>`).join('')}${d.token ? `<button class="quiet tiny" data-diagnostic-token="${esc(d.token)}">Show token</button>` : ''}</div>`;
+          const detailKey = JSON.stringify([level, d.code, d.token]);
+          const expanded = openDiagnosticDetails === detailKey;
+          return `<div class="diagnostic ${level}">${d.token ? `<strong>${esc(d.token)}${modes.length ? ` <span class="muted">· ${esc(modes.join(', '))}</span>` : ''}</strong>` : ''}${d.messages.map((message) => `<p>${esc(message)}</p>`).join('')}${d.token ? `<button class="quiet tiny" data-diagnostic-token="${esc(detailKey)}" aria-expanded="${expanded}">${expanded ? 'Hide source details' : 'View source details'}</button>${expanded ? sourceDetails(d.token, d.code) : ''}` : ''}</div>`;
         })
-        .join('')}</details>`;
+        .join('')}</section>`;
     })
     .join('')}${
     preview.missing.length
-      ? `<details class="diagnostics" data-disclosure="missing"><summary>${preview.missing.length} mapped items outside this export · preserved</summary><p class="small">These may be removed, renamed or excluded by your filters. Their Figma targets remain intact. Use source mappings or the conflict controls to confirm renamed targets.</p>${preview.missing
+      ? `<details class="diagnostics" data-disclosure="missing"><summary>${preview.missing.length} previously synced items outside this export</summary><p class="small">Review conflicts to confirm any renamed items.</p>${preview.missing
           .map(
             (m) =>
               `<div class="diagnostic">${esc(m.kind)} · ${esc(m.group)} / ${esc(m.path)}</div>`,
@@ -629,14 +627,11 @@ function sendDialogView() {
       ...(preview?.variables ?? []),
       ...(preview?.styles ?? []),
     ].filter((row) => row.action === 'conflicting');
-    const hasOutput = [...(preview?.variables ?? []), ...(preview?.styles ?? [])].some(
-      (row) => row.path === diagnosticPath || row.path.startsWith(diagnosticPath + '.'),
-    );
     const missing = missingTargets();
     const recovery = missing.length
       ? `<section class="change"><strong>Deleted from Figma</strong><p>${missing.length} previously synced items are missing. Stage them for recreation with new Figma IDs. Changes are applied when you send to Figma.</p><button data-action="recreate-missing"${disabled()}>Recreate ${missing.length} missing items</button></section>`
       : '';
-    return `<dialog class="sync-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">${dialog === 'issues' ? 'Export warnings' : 'Resolve conflicts'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close details">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${dialog === 'issues' ? diagnosticTokenContext(hasOutput) + diagnosticsView() : recovery + conflicts.map((row) => `<details class="change"><summary>${esc(row.name)}</summary>${conflictControls(row)}${diffView(row)}</details>`).join('') || '<p>No unresolved conflicts.</p>'}</div></dialog>`;
+    return `<dialog class="sync-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">${dialog === 'issues' ? 'Export review' : 'Resolve conflicts'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close details">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${dialog === 'issues' ? diagnosticsView() : recovery + conflicts.map((row) => `<details class="change"><summary>${esc(row.name)}</summary>${conflictControls(row)}${diffView(row)}</details>`).join('') || '<p>No unresolved conflicts.</p>'}</div></dialog>`;
   }
   if (dialog === 'report')
     return `<dialog class="sync-dialog result-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Last sync result</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close result">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${reportView()}</div></dialog>`;
@@ -663,7 +658,7 @@ function sendDialogView() {
       return `<div class="send-group"><label class="inclusion-row"><input type="checkbox" data-group="${esc(group)}"${selectionState(count, options.length)}><span>${esc(group)}</span></label>${options.map((t) => `<label class="inclusion-row send-option"><input type="checkbox" data-send-theme="${esc(t.id)}"${checked(selectedIds.has(t.id))}${disabled()}><span>${esc(t.name)}</span></label>`).join('')}</div>`;
     })
     .join('');
-  return `<dialog class="sync-dialog" aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Pick the theme groups and options to send. Existing items are updated in place, and new ones are added.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<section class="send-groups" aria-label="Theme groups and options" data-scroll="send-options"><label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>${tree}</section>${progressView()}${errorView()}${preview ? `<p class="small">${changeCount(preview)} pending changes across the selected collections.</p>` : ''}${conflictCount(preview) ? '<p class="error-color">Resolve conflicts before sending.</p><button data-action="conflicts">Review conflicts</button>' : ''}${omittedCount(preview) ? `<p class="warning">${omittedCount(preview)} tokens will be omitted. <button class="quiet tiny" data-action="issues">Review omissions</button></p>` : ''}</div><footer class="dialog-footer">${phase === 'syncing' ? '<button data-action="cancel">Stop sync</button>' : ''}<button class="primary" data-action="confirm-send"${disabled(demo || !selectedIds.size || busy() || !preview?.canSync || conflictCount(preview) > 0 || (!settings.variables && !settings.styles))}>${busy() ? 'Preparing…' : demo ? 'Preview only' : sample ? 'Apply sample to this file' : 'Send to Figma'}</button></footer></dialog>`;
+  return `<dialog class="sync-dialog" aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Choose which themes to send to Figma.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<section class="send-groups" aria-label="Theme groups and options" data-scroll="send-options"><label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>${tree}</section>${progressView()}${errorView()}${preview ? `<p class="small">${changeCount(preview)} pending changes.</p>` : ''}${conflictCount(preview) ? '<p class="error-color">Resolve conflicts before sending.</p><button data-action="conflicts">Review conflicts</button>' : ''}${preview?.diagnostics.length ? `<div class="export-review-link">${omittedCount(preview) ? '<span class="warning">Some token values will be skipped.</span>' : ''}<button class="quiet tiny" data-action="issues">Review export</button></div>` : ''}</div><footer class="dialog-footer">${phase === 'syncing' ? '<button data-action="cancel">Stop sync</button>' : ''}<button class="primary" data-action="confirm-send"${disabled(demo || !selectedIds.size || busy() || !preview?.canSync || conflictCount(preview) > 0 || (!settings.variables && !settings.styles))}>${busy() ? 'Preparing…' : demo ? 'Preview only' : sample ? 'Apply sample to this file' : 'Send to Figma'}</button></footer></dialog>`;
 }
 async function closeDialog() {
   if (dialog === 'branch') {
@@ -715,15 +710,13 @@ function mainView() {
   if (!scope && !browseAll)
     scope = groups.find((group) => isIncluded(settings.groups, group)) ?? groups[0] ?? '';
   const conflicts = conflictCount(preview);
-  const issues = groupDiagnostics(preview?.diagnostics ?? []).filter(
-    (d) => d.level !== 'info',
-  ).length;
+  const issues = groupDiagnostics(preview?.diagnostics ?? []).length;
   const c = connection;
   return `<main class="main workspace companion-workspace"><section class="source-row"><span class="source-icon">${c && !sample ? providerLogo(c.provider) : icon('git')}</span><div class="source-text"><button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.name || c?.repository)}</span>${icon('chevron')}</button></div>${settingsMenu()}</section>
   ${tab !== 'variables' ? `<div class="secondary-heading"><button class="quiet tiny" data-tab="variables">← Variables</button><strong>Styles</strong></div>` : ''}${browserToolbar()}
   <div class="feedback">${dialog === 'branch' ? '' : progressView() + errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}</div>
   <section class="browser-content" aria-label="${tab === 'styles' ? 'Styles' : 'Variables'}" aria-busy="${busy()}">${tab === 'variables' ? variableView() : styleView()}</section>
-  ${issues || conflicts ? `<div class="export-warnings">${conflicts ? `<button class="quiet error-color" data-action="conflicts">${conflicts} conflicts · Review</button>` : ''}${issues ? `<button class="quiet" data-action="issues">Export warnings <span class="count-pill">${issues}</span> ${icon('chevron')}</button>` : ''}</div>` : ''}
+  ${issues || conflicts ? `<div class="export-warnings">${conflicts ? `<button class="quiet error-color" data-action="conflicts">${conflicts} conflicts · Review</button>` : ''}${issues ? `<button class="quiet" data-action="issues">Review export <span class="count-pill">${issues}</span> ${icon('chevron')}</button>` : ''}</div>` : ''}
   </main><footer class="footer workspace-footer companion-footer"><div class="footer-row">${busy() ? `<button data-action="cancel"${disabled(phase === 'previewing')}>Stop</button>` : `<div class="source-actions"><button class="branch-button" data-action="${c && !sample ? 'open-branch' : 'edit'}" aria-label="${sample ? 'Connect repository' : c ? 'Switch branch' : 'Edit repository connection'}"${c && !sample ? ` aria-expanded="${!!branchMenu}"${branchMenu ? ' aria-controls="branch-options"' : ''}` : ''}>${icon('branch')}<span>${esc(sample ? 'Sample' : (c?.branch ?? 'main'))}</span>${icon('chevron')}</button><button class="icon-button" data-action="fetch" title="${sample ? 'Reload sample' : 'Fetch updates'}" aria-label="${sample ? 'Reload sample' : 'Fetch updates'}">${icon('refresh')}</button>${branchMenuView()}</div>`}<div class="send-actions"><button class="sync-button" data-action="send"${disabled(busy() || !project)}>${icon('arrow')}${demo ? 'Export preview' : 'Send to Figma'}</button><button class="icon-button" data-action="send-menu" aria-label="Choose output to send" aria-expanded="${sendMenuOpen}"${disabled(busy() || !project)}>${icon('chevron')}</button>${sendMenuOpen ? '<div class="menu send-menu"><button data-action="send-variables">Send variables only</button><button data-action="send-styles">Send styles only</button></div>' : ''}</div></div></footer>${sendDialogView()}`;
 }
 let renderedScreen = '';
@@ -738,6 +731,7 @@ const focusAttributes = [
   'data-browse-filter',
   'data-row',
   'data-open-token',
+  'data-diagnostic-token',
   'data-value',
   'data-group',
   'data-choice',
@@ -1172,7 +1166,10 @@ app.addEventListener('click', async (event) => {
       return;
     }
     if (button.dataset.diagnosticToken) {
-      diagnosticPath = button.dataset.diagnosticToken;
+      openDiagnosticDetails =
+        openDiagnosticDetails === button.dataset.diagnosticToken
+          ? ''
+          : button.dataset.diagnosticToken;
       dialog = 'issues';
       render();
       return;
@@ -1295,8 +1292,7 @@ app.addEventListener('click', async (event) => {
       case 'conflicts':
       case 'issues':
         dialog = button.dataset.action;
-        diagnosticPath = '';
-        diagnosticsOpen = true;
+        openDiagnosticDetails = '';
         render();
         break;
       case 'recover-connection':

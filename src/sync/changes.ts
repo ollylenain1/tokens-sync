@@ -82,7 +82,7 @@ export function describeChanges(
   }
   for (const op of collections) {
     const current = state.collections.find((c) => c.id === op.targetId);
-    op.changes = [change('Name', 'name', current?.name, op.desired.name)];
+    op.changes = [change('Name', 'name', current?.name, op.desired.figmaName ?? op.desired.name)];
     for (const mode of op.desired.modes)
       op.changes.push(
         change(

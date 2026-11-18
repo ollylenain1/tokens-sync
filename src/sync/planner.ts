@@ -17,6 +17,7 @@ import {
   record,
   registryKey,
   stable,
+  variableKey,
 } from '../core/model';
 import { getAt, setAt } from '../core/desired';
 import { describeChanges } from './changes';
@@ -191,9 +192,49 @@ export function planSync(
   choices: Choices = {},
 ): SyncPlan {
   const diagnostics = [...model.diagnostics];
-  const collections: Operation<DesiredCollection>[] = model.collections.map((desired) => {
+  const byGroup = new Map<string, Operation<DesiredCollection>>();
+  const sourceGroups = new Map(model.collections.map((c) => [c.name, c]));
+  const visiting = new Set<string>();
+  const cyclic = new Set<string>();
+  const ordered: DesiredCollection[] = [];
+  function visit(collection: DesiredCollection) {
+    if (visiting.has(collection.name)) {
+      for (const name of visiting) cyclic.add(name);
+      return;
+    }
+    if (sourceGroups.get(collection.name) !== collection) return;
+    visiting.add(collection.name);
+    const parent = collection.parentGroup && sourceGroups.get(collection.parentGroup);
+    if (parent) visit(parent);
+    visiting.delete(collection.name);
+    sourceGroups.delete(collection.name);
+    ordered.push(collection);
+  }
+  for (const collection of model.collections) visit(collection);
+  const collectionModes = new Map<string, CollectionState['modes'][number]>();
+  const collections: Operation<DesiredCollection>[] = ordered.map((source) => {
+    const parentOp = source.parentGroup ? byGroup.get(source.parentGroup) : undefined;
+    const mappedParent = source.parentGroup
+      ? mappingFor(registry, model, keyOf('collection', source.parentGroup))?.targetId
+      : undefined;
+    const parent = state.collections.find(
+      (c) =>
+        c.id === (parentOp?.targetId ?? mappedParent ?? source.parentId) ||
+        (!parentOp && !mappedParent && c.key === source.parentId),
+    );
+    const desired = { ...source, parentId: parent?.id ?? source.parentId };
     const mapping = mappingFor(registry, model, desired.key);
-    const match = target(desired, state.collections, mapping, choices[desired.key]);
+    const name = desired.figmaName ?? desired.name;
+    const pool = parent
+      ? state.collections.filter((c) => !c.isExtension || c.parentId === parent.id)
+      : state.collections;
+    const match = target(
+      { ...desired, name },
+      pool,
+      mapping,
+      choices[desired.key],
+      state.collections,
+    );
     const op: Operation<DesiredCollection> = {
       key: desired.key,
       desired,
@@ -204,26 +245,42 @@ export function planSync(
         !!mapping &&
         !choices[desired.key] &&
         !state.collections.some((item) => item.id === mapping.targetId) &&
-        !state.collections.some((item) => item.name === desired.name),
+        !pool.some((item) => item.name === name),
       candidates: match.candidates,
     };
+    byGroup.set(desired.name, op);
     if (op.action === 'skipped') return op;
     const current = match.target;
-    const parent = desired.parentId
-      ? state.collections.find((c) => c.id === desired.parentId)
-      : undefined;
-    if (desired.parentId && (!parent || !parent.canExtend)) {
+    const extending = !!desired.parentId || !!desired.parentGroup || current?.isExtension;
+    if (
+      cyclic.has(desired.name) ||
+      desired.extensionError ||
+      (parentOp && ['conflicting', 'skipped'].includes(parentOp.action))
+    ) {
       op.action = 'conflicting';
       op.reason =
-        'The selected parent cannot be extended by this API. Use a local base collection or clear the extension setting.';
-    }
-    if (current && desired.parentId && current.parentId !== desired.parentId) {
+        desired.extensionError ??
+        (cyclic.has(desired.name)
+          ? 'Extended collections cannot form a parent cycle.'
+          : 'Resolve the parent collection before syncing this extension.');
+    } else if (
+      extending &&
+      (desired.parentId || desired.parentGroup) &&
+      !parentOp &&
+      (!parent || (!current && !parent.canExtend))
+    ) {
       op.action = 'conflicting';
       op.reason =
-        'An existing collection cannot be reparented. Choose a new theme-group name for the extension.';
+        'The parent collection is unavailable. Include its theme group or open the Figma file that contains the parent.';
+    } else if (
+      current &&
+      (desired.parentId || desired.parentGroup) &&
+      (!parent || current.parentId !== parent.id)
+    ) {
+      op.action = 'conflicting';
+      op.reason =
+        'An existing collection cannot be reparented. Select an extension of the intended parent.';
     }
-    const modeSource = current ?? parent;
-    const extending = !!desired.parentId || current?.isExtension;
     if (new Set(desired.modes.map((m) => m.name)).size !== desired.modes.length) {
       op.action = 'conflicting';
       op.reason = 'Two themes in this group have the same mode name.';
@@ -241,33 +298,62 @@ export function planSync(
         'Themes in this group reference different collections. Choose the correct collection explicitly.';
       op.candidates = state.collections.map((c) => ({ id: c.id, name: c.name }));
     }
+    const inheritedModes = new Set<string>();
     for (const mode of desired.modes) {
       const mapped =
         registry.modes[registryKey(model.identity, keyOf('mode', desired.name, mode.key))];
-      const matches =
-        modeSource?.modes.filter(
-          (m) => m.modeId === mapped || m.modeId === mode.sourceId || m.name === mode.name,
+      const parentMode = mode.parentMode ?? mode;
+      const parentModeMapping = desired.parentGroup
+        ? registry.modes[
+            registryKey(model.identity, keyOf('mode', desired.parentGroup, parentMode.key))
+          ]
+        : undefined;
+      const parentModes =
+        parent?.modes.filter(
+          (m) =>
+            m.modeId === parentModeMapping ||
+            m.modeId === mode.parentMode?.sourceId ||
+            m.name === parentMode.name,
         ) ?? [];
-      if (matches.length > 1) {
+      const plannedMode = parentOp?.desired.modes.some((m) =>
+        mode.parentMode ? m.key === parentMode.key : m.name === mode.name,
+      );
+      const parentModeId = parentModes.length === 1 ? parentModes[0].modeId : undefined;
+      const matches =
+        current?.modes.filter((m) =>
+          parentModeId && mode.parentMode
+            ? m.parentModeId === parentModeId
+            : m.modeId === mapped || m.modeId === mode.sourceId || m.name === mode.name,
+        ) ?? [];
+      const inheritedMode =
+        parentModeId ?? (mode.parentMode && plannedMode ? parentMode.key : undefined);
+      if (inheritedMode && inheritedModes.has(inheritedMode)) {
+        op.action = 'conflicting';
+        op.reason = 'Two extended themes reference the same parent mode.';
+      }
+      if (inheritedMode) inheritedModes.add(inheritedMode);
+      if (matches.length > 1 || parentModes.length > 1) {
         op.action = 'conflicting';
         op.reason = `Ambiguous mode mapping for ${mode.name}. Resolve duplicate or conflicting mode names in Figma.`;
-      }
-      if (extending && !matches.length) {
+      } else if (
+        extending &&
+        !(current
+          ? matches.length || (plannedMode && !parentModeId)
+          : plannedMode || parentModeId) &&
+        op.action !== 'conflicting'
+      ) {
         op.action = 'conflicting';
-        op.reason = `Extension mode ${mode.name} must already exist in its parent collection. No parent modes will be created or renamed.`;
+        op.reason = `No inherited parent mode found for ${mode.name}. Include its parent theme or check the mode mapping.`;
       }
-      if (current && !matches.length && op.action === 'unchanged') op.action = 'updated';
+      if (matches.length === 1) collectionModes.set(keyOf(desired.name, mode.key), matches[0]);
       if (
         current &&
-        matches.length === 1 &&
-        matches[0].name !== mode.name &&
         op.action === 'unchanged' &&
-        !extending
+        (!matches.length || (matches[0].name !== mode.name && (!extending || !!mode.parentMode)))
       )
         op.action = 'updated';
     }
-    if (current && current.name !== desired.name && op.action === 'unchanged')
-      op.action = 'updated';
+    if (current && current.name !== name && op.action === 'unchanged') op.action = 'updated';
     if (
       diagnostics.some(
         (d) => d.code === 'MISSING_SET' && desired.modes.some((m) => m.key === d.theme),
@@ -290,98 +376,148 @@ export function planSync(
         op.reason =
           'Two theme groups would modify the same collection. Choose separate collections or exclude one group.';
       }
-  const byGroup = new Map(collections.map((c) => [c.desired.name, c]));
-  const variables: Operation<DesiredVariable>[] = model.variables.map((desired) => {
-    const collection = byGroup.get(desired.group)!;
-    const currentCollection = state.collections.find((c) => c.id === collection.targetId);
-    const parent = state.collections.find((c) => c.id === collection.desired.parentId);
-    const inherited = currentCollection?.isExtension ? currentCollection : parent;
-    const pool = state.variables.filter(
-      (v) =>
-        v.type === desired.type &&
-        (inherited ? inherited.variableIds.includes(v.id) : v.collectionId === collection.targetId),
-    );
-    const mapping = mappingFor(registry, model, desired.key);
-    const match = target(desired, pool, mapping, choices[desired.key], state.variables);
-    const op: Operation<DesiredVariable> = {
-      key: desired.key,
-      desired,
-      targetId: match.target?.id,
-      action: match.action ?? (match.target ? 'updated' : 'new'),
-      reason: match.reason,
-      missingTarget:
-        !!mapping &&
-        !choices[desired.key] &&
-        !state.variables.some((item) => item.id === mapping.targetId) &&
-        !pool.some((item) => item.name === desired.name) &&
-        !inherited,
-      candidates: match.candidates,
-    };
-    if (op.action === 'skipped') return op;
-    if (collection.action === 'conflicting' || collection.action === 'skipped') {
-      op.action = 'conflicting';
-      op.reason = 'Resolve or exclude the collection before syncing this variable.';
-    }
-    if (inherited && !match.target) {
-      op.action = 'conflicting';
-      op.reason =
-        'No compatible inherited variable exists. Create it in the parent first; this sync never duplicates inherited variables.';
-    }
+  for (const op of collections) {
+    const parent = op.desired.parentGroup && byGroup.get(op.desired.parentGroup);
     if (
-      !match.target &&
-      state.variables.some(
+      parent &&
+      ['conflicting', 'skipped'].includes(parent.action) &&
+      !['conflicting', 'skipped'].includes(op.action)
+    ) {
+      op.action = 'conflicting';
+      op.reason = 'Resolve the parent collection before syncing this extension.';
+    }
+  }
+  const sourceVariables = new Map<string, DesiredVariable[]>();
+  for (const desired of model.variables) {
+    const group = sourceVariables.get(desired.group) ?? [];
+    group.push(desired);
+    sourceVariables.set(desired.group, group);
+  }
+  const varByKey = new Map<string, Operation<DesiredVariable>>();
+  const variables: Operation<DesiredVariable>[] = collections
+    .flatMap((c) => sourceVariables.get(c.desired.name) ?? [])
+    .map((desired) => {
+      const collection = byGroup.get(desired.group)!;
+      const currentCollection = state.collections.find((c) => c.id === collection.targetId);
+      const parent = state.collections.find((c) => c.id === collection.desired.parentId);
+      const inherited = currentCollection?.isExtension ? currentCollection : parent;
+      const parentGroup = collection.desired.parentGroup;
+      const parentVariable = parentGroup
+        ? varByKey.get(variableKey(parentGroup, desired.path))
+        : undefined;
+      const pool = state.variables.filter(
         (v) =>
-          v.collectionId === collection.targetId &&
-          v.name === desired.name &&
-          v.type !== desired.type,
-      )
-    ) {
-      op.action = 'conflicting';
-      op.reason =
-        'A variable with this name has another type. Existing variables cannot be converted in place.';
-    }
-    if (!match.target && collection.desired.modes.some((m) => !desired.values[m.key])) {
-      op.action = 'conflicting';
-      op.reason =
-        'A new variable has no source value in every selected mode. Add the missing token to those themes first.';
-    }
-    if (
-      diagnostics.some(
-        (d) =>
-          d.level === 'error' &&
-          d.token === desired.path &&
-          collection.desired.modes.some((m) => m.key === d.theme),
-      )
-    ) {
-      op.action = 'conflicting';
-      op.reason = 'This token has a resolution or conversion error in at least one theme.';
-    }
-    if (!model.settings.variables) {
-      op.action = match.target ? 'unchanged' : 'skipped';
-      if (!match.target)
-        op.reason = 'Variable sync is disabled and no existing compatible variable was found.';
-      if (match.action === 'conflicting') {
+          v.type === desired.type &&
+          (inherited
+            ? inherited.variableIds.includes(v.id)
+            : v.collectionId === collection.targetId),
+      );
+      const mapping = mappingFor(registry, model, desired.key);
+      const match = target(desired, pool, mapping, choices[desired.key], state.variables);
+      const op: Operation<DesiredVariable> = {
+        key: desired.key,
+        desired,
+        targetId: match.target?.id,
+        action: match.action ?? (match.target ? 'updated' : 'new'),
+        reason: match.reason,
+        missingTarget:
+          !!mapping &&
+          !choices[desired.key] &&
+          !state.variables.some((item) => item.id === mapping.targetId) &&
+          !pool.some((item) => item.name === desired.name) &&
+          !inherited,
+        candidates: match.candidates,
+      };
+      varByKey.set(op.key, op);
+      if (op.action === 'skipped') return op;
+      if (
+        collection.action === 'conflicting' ||
+        collection.action === 'skipped' ||
+        (parentGroup &&
+          ['conflicting', 'skipped'].includes(byGroup.get(parentGroup)?.action ?? 'unchanged'))
+      ) {
         op.action = 'conflicting';
-        op.reason = match.reason;
+        op.reason = 'Resolve or exclude the collection before syncing this variable.';
       }
-    }
-    return op;
-  });
+      const extending = inherited || collection.desired.parentGroup || collection.desired.parentId;
+      if (extending && !match.target) {
+        if (
+          !match.action &&
+          parentVariable?.desired.type === desired.type &&
+          model.settings.variables
+        ) {
+          op.inheritedFrom = parentVariable.key;
+          op.targetId = parentVariable.targetId;
+        } else if (op.action !== 'conflicting') {
+          op.action = 'conflicting';
+          op.reason =
+            'No compatible inherited variable exists. Include the variable in the parent collection first.';
+        }
+      }
+      if (
+        !match.target &&
+        state.variables.some(
+          (v) =>
+            v.collectionId === collection.targetId &&
+            v.name === desired.name &&
+            v.type !== desired.type,
+        )
+      ) {
+        op.action = 'conflicting';
+        op.reason =
+          'A variable with this name has another type. Existing variables cannot be converted in place.';
+      }
+      if (
+        !extending &&
+        !match.target &&
+        collection.desired.modes.some((m) => !desired.values[m.key])
+      ) {
+        op.action = 'conflicting';
+        op.reason =
+          'A new variable has no source value in every selected mode. Add the missing token to those themes first.';
+      }
+      if (
+        diagnostics.some(
+          (d) =>
+            d.level === 'error' &&
+            d.token === desired.path &&
+            collection.desired.modes.some((m) => m.key === d.theme),
+        )
+      ) {
+        op.action = 'conflicting';
+        op.reason = 'This token has a resolution or conversion error in at least one theme.';
+      }
+      if (!model.settings.variables) {
+        op.action = match.target ? 'unchanged' : 'skipped';
+        if (!match.target)
+          op.reason = 'Variable sync is disabled and no existing compatible variable was found.';
+        if (match.action === 'conflicting') {
+          op.action = 'conflicting';
+          op.reason = match.reason;
+        }
+      }
+      return op;
+    });
   const ids = new Map(
     variables
       .filter((v) => v.targetId && !['conflicting', 'skipped'].includes(v.action))
       .map((v) => [v.key, v.targetId!]),
   );
-  const varByKey = new Map(variables.map((v) => [v.key, v]));
   for (const op of variables) {
     if (['conflicting', 'skipped'].includes(op.action)) continue;
     const collection = byGroup.get(op.desired.group)!;
     const current = state.variables.find((v) => v.id === op.targetId);
-    const coll = state.collections.find((c) => c.id === collection.targetId);
+    const currentCollection = state.collections.find((c) => c.id === collection.targetId);
+    const extending =
+      !!collection.desired.parentId ||
+      !!collection.desired.parentGroup ||
+      currentCollection?.isExtension;
     let changed =
       !current ||
-      current.name !== op.desired.name ||
-      (!model.settings.preserveMetadata && current.description !== (op.desired.description ?? ''));
+      (!extending &&
+        (current.name !== op.desired.name ||
+          (!model.settings.preserveMetadata &&
+            current.description !== (op.desired.description ?? ''))));
     const baseline = mappingFor(registry, model, op.key);
     let localDrift = false;
     for (const [themeId, spec] of Object.entries(op.desired.values)) {
@@ -393,14 +529,7 @@ export function planSync(
             'An alias target is unresolved or excluded. Resolve that mapping before syncing.';
         }
       }
-      const desiredMode = collection.desired.modes.find((m) => m.key === themeId)!;
-      const mode = coll?.modes.find(
-        (m) =>
-          m.modeId ===
-            registry.modes[registryKey(model.identity, keyOf('mode', op.desired.group, themeId))] ||
-          m.modeId === desiredMode.sourceId ||
-          m.name === desiredMode.name,
-      );
+      const mode = collectionModes.get(keyOf(op.desired.group, themeId));
       const desiredValue = spec.alias
         ? { type: 'VARIABLE_ALIAS', id: ids.get(spec.alias) ?? `pending:${spec.alias}` }
         : spec.literal;
@@ -408,6 +537,8 @@ export function planSync(
       if (
         mode &&
         current &&
+        (!currentCollection?.overrideModes ||
+          currentCollection.overrideModes[current.id]?.includes(mode.modeId)) &&
         baseline?.status === 'synced' &&
         record(baseline.lastValue) &&
         Object.prototype.hasOwnProperty.call(baseline.lastValue, mode.modeId) &&
@@ -689,9 +820,11 @@ export function planSync(
     for (const op of variables)
       if (
         !['conflicting', 'skipped'].includes(op.action) &&
-        Object.values(op.desired.values).some(
-          (v) => v.alias && varByKey.get(v.alias)?.action === 'conflicting',
-        )
+        ((op.inheritedFrom &&
+          ['conflicting', 'skipped'].includes(varByKey.get(op.inheritedFrom)!.action)) ||
+          Object.values(op.desired.values).some(
+            (v) => v.alias && varByKey.get(v.alias)?.action === 'conflicting',
+          ))
       ) {
         op.action = 'conflicting';
         op.reason = 'An alias target requires rename or mapping review.';

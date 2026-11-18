@@ -44,6 +44,9 @@ export interface Theme {
   selectedTokenSets: Record<string, 'enabled' | 'source' | 'disabled'>;
   collectionId?: string;
   modeId?: string;
+  isExtension?: boolean;
+  parentCollectionId?: string;
+  parentThemeId?: string;
   variableReferences: Record<string, string>;
   styleReferences: Record<string, string>;
 }
@@ -94,8 +97,16 @@ export interface DesiredCollection {
   key: string;
   name: string;
   sourceIds: string[];
+  figmaName?: string;
   parentId?: string;
-  modes: { key: string; name: string; sourceId?: string }[];
+  parentGroup?: string;
+  extensionError?: string;
+  modes: {
+    key: string;
+    name: string;
+    sourceId?: string;
+    parentMode?: { key: string; name: string; sourceId?: string };
+  }[];
 }
 export interface DesiredVariable {
   key: string;
@@ -142,11 +153,12 @@ export interface CollectionState {
   id: string;
   key?: string;
   name: string;
-  modes: { modeId: string; name: string }[];
+  modes: { modeId: string; name: string; parentModeId?: string }[];
   variableIds: string[];
   isExtension: boolean;
   parentId?: string;
   canExtend: boolean;
+  overrideModes?: Record<string, string[]>;
 }
 export interface VariableState {
   id: string;
@@ -203,6 +215,7 @@ export interface Operation<T> {
   action: Action;
   desired: T;
   targetId?: string;
+  inheritedFrom?: string;
   reason?: string;
   missingTarget?: boolean;
   replacedBindings?: Record<string, string>;

@@ -157,6 +157,13 @@ export class FigmaAdapter {
         parentId: c.isExtension
           ? (c as unknown as ExtendedVariableCollection).parentVariableCollectionId
           : undefined,
+        overrideModes: c.isExtension
+          ? Object.fromEntries(
+              Object.entries(
+                (c as unknown as ExtendedVariableCollection).variableOverrides ?? {},
+              ).map(([id, overrides]) => [id, Object.keys(overrides)]),
+            )
+          : undefined,
         canExtend: typeof c.extend === 'function',
       })),
       variables: states,

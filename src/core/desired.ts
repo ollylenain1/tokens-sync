@@ -1,6 +1,7 @@
 import {
   BindingSpec,
   DesiredModel,
+  DesiredCollection,
   DesiredStyle,
   DesiredVariable,
   Diagnostic,
@@ -63,9 +64,7 @@ function expanded(
         'This border contains unsupported properties or a composite stroke style.',
       );
     const raw = resolver.rawComposite(token.path);
-    warn(
-      'Border exported as color, width and style variables. These do not form a native border style or apply a stroke automatically.',
-    );
+    warn('Exports color, width, and style as separate variables. Set the stroke in Figma.');
     return [
       ['color', 'color'],
       ['width', 'borderWidth'],
@@ -90,9 +89,7 @@ function expanded(
         type === 'borderradius'
           ? ['topLeft', 'topRight', 'bottomRight', 'bottomLeft']
           : ['top', 'right', 'bottom', 'left'];
-      warn(
-        'Multi-value token exported as four named scalar variables. Compound references are resolved; no layout is applied automatically.',
-      );
+      warn('Exports four number variables. Apply them to the matching sides or corners in Figma.');
       return names.map((name, i) => ({
         ...token,
         path: `${token.path}.${name}`,
@@ -119,23 +116,55 @@ export async function buildDesired(
     (t) => (!settings.groups.length || settings.groups.includes(t.group)) && !excluded.has(t.id),
   );
   const resolvers = themes.map((theme) => new TokenResolver(project, theme, settings));
-  const collections = [...new Set(themes.map((t) => t.group))].map((group) => ({
-    partialSelection: project.themes.some((t) => t.group === group && excluded.has(t.id)),
-    key: keyOf('collection', group),
-    name: group,
-    sourceIds: [
-      ...new Set(
-        themes
-          .filter((t) => t.group === group)
-          .map((t) => t.collectionId)
-          .filter((v): v is string => !!v),
-      ),
-    ],
-    parentId: settings.extensionParents[group],
-    modes: themes
-      .filter((t) => t.group === group)
-      .map((t) => ({ key: t.id, name: t.name, sourceId: t.modeId })),
-  }));
+  const themesById = new Map(project.themes.map((theme) => [theme.id, theme]));
+  const groupsByCollection = new Map<string, Set<string>>();
+  for (const theme of project.themes) {
+    if (!theme.collectionId) continue;
+    const groups = groupsByCollection.get(theme.collectionId) ?? new Set<string>();
+    groups.add(theme.group);
+    groupsByCollection.set(theme.collectionId, groups);
+  }
+  const modeFor = (theme: Theme) => ({ key: theme.id, name: theme.name, sourceId: theme.modeId });
+  const collections: DesiredCollection[] = [...new Set(themes.map((t) => t.group))].map((group) => {
+    const selected = themes.filter((t) => t.group === group);
+    const groupThemes = project.themes.filter((t) => t.group === group);
+    const extension = groupThemes.some((t) => t.isExtension);
+    const parentIds = new Set(
+      groupThemes.flatMap((t) => (t.parentCollectionId ? [t.parentCollectionId] : [])),
+    );
+    const parentGroups = new Set(
+      groupThemes.flatMap((t) => {
+        const parentTheme = t.parentThemeId && themesById.get(t.parentThemeId);
+        const collectionGroups = t.parentCollectionId
+          ? groupsByCollection.get(t.parentCollectionId)
+          : undefined;
+        return [...(parentTheme ? [parentTheme.group] : []), ...(collectionGroups ?? [])];
+      }),
+    );
+    const parentId =
+      settings.extensionParents[group] ?? (extension ? [...parentIds][0] : undefined);
+    return {
+      partialSelection: groupThemes.some((t) => excluded.has(t.id)),
+      key: keyOf('collection', group),
+      name: group,
+      figmaName: extension ? group.split('/').pop()?.trim() || group : undefined,
+      sourceIds: [...new Set(selected.flatMap((t) => (t.collectionId ? [t.collectionId] : [])))],
+      parentId,
+      parentGroup: extension ? [...parentGroups][0] : undefined,
+      extensionError:
+        extension &&
+        (groupThemes.some((t) => !t.isExtension) ||
+          parentIds.size > 1 ||
+          parentGroups.size > 1 ||
+          (!parentId && !parentGroups.size))
+          ? 'The extended theme group must reference a single parent collection.'
+          : undefined,
+      modes: selected.map((t) => {
+        const parent = extension && t.parentThemeId ? themesById.get(t.parentThemeId) : undefined;
+        return { ...modeFor(t), parentMode: parent ? modeFor(parent) : undefined };
+      }),
+    };
+  });
   const variables = new Map<string, DesiredVariable>();
   const sources = new Map<string, Token>();
   const origins = new Map<string, { resolver: TokenResolver; token: Token }[]>();
@@ -389,8 +418,7 @@ export async function buildDesired(
           code: 'THEME_STYLE',
           token: style.path,
           theme: theme.id,
-          message:
-            'Unbound properties differ between themes. Exporting separate literal styles for each theme.',
+          message: 'Values differ by theme, so each theme gets its own style.',
         });
       }
       if (style.kind === 'TEXT')

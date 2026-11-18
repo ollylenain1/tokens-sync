@@ -50,6 +50,10 @@ export function parseThemes(input: unknown): Theme[] {
       selectedTokenSets,
       collectionId: typeof v.$figmaCollectionId === 'string' ? v.$figmaCollectionId : undefined,
       modeId: typeof v.$figmaModeId === 'string' ? v.$figmaModeId : undefined,
+      isExtension: v.$figmaIsExtension === true,
+      parentCollectionId:
+        typeof v.$figmaParentCollectionId === 'string' ? v.$figmaParentCollectionId : undefined,
+      parentThemeId: typeof v.$figmaParentThemeId === 'string' ? v.$figmaParentThemeId : undefined,
       variableReferences: stringMap(v.$figmaVariableReferences),
       styleReferences: stringMap(v.$figmaStyleReferences),
     };

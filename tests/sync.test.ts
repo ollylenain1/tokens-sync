@@ -445,3 +445,64 @@ test('a partial theme send updates the selected mode and retains drift detection
   const full = await preview(mock, changed);
   assert.equal(full.variables.find((v) => v.targetId === variable.id)?.action, 'conflicting');
 });
+
+test('Tokens Studio extension metadata recreates the parent and inherited mode in a new file', async () => {
+  const mock = mockFigma();
+  const parentTheme = {
+    id: 'base-light',
+    name: 'Light',
+    group: 'Colors',
+    selectedTokenSets: { base: 'enabled' },
+    $figmaCollectionId: 'VariableCollectionId:source-parent',
+    $figmaModeId: 'source-light',
+  };
+  const childTheme = {
+    id: 'brand-light',
+    name: 'Brand Light',
+    group: 'Colors/Brand',
+    selectedTokenSets: { base: 'source', brand: 'enabled' },
+    $figmaCollectionId: 'VariableCollectionId:source-child',
+    $figmaModeId: 'source-brand-light',
+    $figmaIsExtension: true,
+    $figmaParentCollectionId: parentTheme.$figmaCollectionId,
+    $figmaParentThemeId: parentTheme.id,
+  };
+  const source = {
+    $themes: [childTheme, parentTheme],
+    $metadata: { tokenSetOrder: ['base', 'brand'] },
+    base: {
+      spacing: { type: 'number', value: 4 },
+      size: { type: 'number', value: 10 },
+    },
+    brand: {
+      spacing: { type: 'number', value: 8 },
+      size: { type: 'number', value: 10 },
+    },
+  };
+  const settings = { ...defaultSettings, styles: false };
+  const { report } = await run(mock, source, settings);
+  assert.equal(report.failed, 0, JSON.stringify(report.diagnostics));
+  assert.equal(report.skipped, 0, JSON.stringify(report.diagnostics));
+  const [parent, child] = mock.collections;
+  assert.equal(parent.name, 'Colors');
+  assert.equal(child.name, 'Brand');
+  assert.equal(child.parentVariableCollectionId, parent.id);
+  assert.equal(child.modes[0].name, 'Brand Light');
+  assert.equal(child.modes[0].parentModeId, parent.modes[0].modeId);
+  assert.equal(mock.variables.length, 2);
+  const spacing = mock.variables.find((v) => v.name === 'spacing');
+  assert.equal(child.variableOverrides[spacing.id][child.defaultModeId], 8);
+  const size = mock.variables.find((v) => v.name === 'size');
+  assert.equal(child.variableOverrides[size.id], undefined);
+  assert.equal((await preview(mock, source, settings)).counts.variables.unchanged, 4);
+
+  // The source IDs are from another file. The saved parent mapping also works
+  // when the next send only selects the extension.
+  const childOnly = { ...settings, groups: ['Colors/Brand'] };
+  source.brand.spacing.value = 4;
+  const next = await run(mock, source, childOnly);
+  assert.equal(next.report.failed, 0);
+  assert.equal(next.report.skipped, 0);
+  assert.equal(child.variableOverrides[spacing.id][child.defaultModeId], undefined);
+  assert.equal(spacing.valuesByMode[parent.defaultModeId], 4);
+});

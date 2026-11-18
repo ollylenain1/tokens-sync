@@ -452,19 +452,23 @@ test('a bad token path keeps the connection draft and never saves an unverified 
 
 test('omitted diagnostic tokens show conversion reasons instead of a misleading empty search', async () => {
   const ui = await openUI(false, undefined, undefined, true);
-  await ui.click({ diagnosticToken: 'invalid-color' });
-  assert.match(ui.app.innerHTML, /No output is planned for this token/);
-  assert.match(ui.app.innerHTML, /Source token details/);
-  assert.match(ui.app.innerHTML, /Export warnings/);
+  await ui.click({ action: 'issues' });
+  assert.match(ui.app.innerHTML, /Export review/);
+  assert.match(ui.app.innerHTML, /invalid-color/);
+  assert.doesNotMatch(ui.app.innerHTML, /aria-label="Source details"/);
+  await ui.click({ diagnosticToken: JSON.stringify(['error', 'COLOR', 'invalid-color']) });
+  assert.match(ui.app.innerHTML, /aria-label="Source details"/);
   assert.doesNotMatch(ui.app.innerHTML, /No matching changes/);
 });
 
 test('partial composite diagnostics expose source definitions without changing export scope', async () => {
   const ui = await openUI();
   const count = ui.requests.length;
-  await ui.click({ diagnosticToken: 'outline' });
-  assert.match(ui.app.innerHTML, /Some output exists for this token/);
-  assert.match(ui.app.innerHTML, /Source definitions/);
+  const key = JSON.stringify(['warning', 'PARTIAL_COMPOSITE', 'outline']);
+  await ui.click({ action: 'issues' });
+  assert.match(ui.app.innerHTML, /Exports color, width, and style as separate variables/);
+  await ui.click({ diagnosticToken: key });
+  assert.match(ui.app.innerHTML, /Hide source details/);
   assert.match(ui.app.innerHTML, /PARTIAL_COMPOSITE/);
   assert.equal(ui.requests.length, count);
 });

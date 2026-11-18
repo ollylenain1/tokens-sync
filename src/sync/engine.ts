@@ -145,24 +145,50 @@ export async function applyPlan(
         }
         try {
           const existed = !!op.targetId;
+          const parentGroup = op.desired.parentGroup;
+          const inPlan =
+            parentGroup && plan.collections.some((parent) => parent.desired.name === parentGroup);
+          const parentId = inPlan ? collectionIds.get(parentGroup) : op.desired.parentId;
+          if (inPlan && !parentId)
+            throw new SyncError('EXTENSION_PARENT', 'The parent collection could not be prepared.');
+          const name = op.desired.figmaName ?? op.desired.name;
           const collection = op.targetId
             ? adapter.collections.get(op.targetId)!
-            : adapter.createCollection(op.desired.name, op.desired.parentId);
+            : adapter.createCollection(name, parentId);
           collectionIds.set(op.desired.name, collection.id);
           save(op, 'collection', collection.id, undefined, 'partial');
           checkpoint();
-          if (collection.name !== op.desired.name) collection.name = op.desired.name;
+          if (collection.name !== name) collection.name = name;
           let usedDefault = existed || collection.isExtension;
           for (const mode of op.desired.modes) {
             const mapKey = registryKey(
               plan.model.identity,
               keyOf('mode', op.desired.name, mode.key),
             );
-            let found = collection.modes.find(
-              (m) =>
-                m.modeId === registry.modes[mapKey] ||
-                m.modeId === mode.sourceId ||
-                m.name === mode.name,
+            const parent = parentId ? adapter.collections.get(parentId) : undefined;
+            const parentMode = mode.parentMode;
+            const savedParentMode =
+              parentGroup && parentMode
+                ? registry.modes[
+                    registryKey(plan.model.identity, keyOf('mode', parentGroup, parentMode.key))
+                  ]
+                : undefined;
+            const inheritedModeId =
+              parent && (parentMode || !existed)
+                ? (parentGroup && modeIds.get(keyOf(parentGroup, parentMode?.key ?? mode.key))) ||
+                  parent.modes.find(
+                    (m) =>
+                      m.modeId === savedParentMode ||
+                      m.modeId === parentMode?.sourceId ||
+                      m.name === (parentMode?.name ?? mode.name),
+                  )?.modeId
+                : undefined;
+            let found = collection.modes.find((m) =>
+              inheritedModeId
+                ? 'parentModeId' in m && m.parentModeId === inheritedModeId
+                : m.modeId === registry.modes[mapKey] ||
+                  m.modeId === mode.sourceId ||
+                  m.name === mode.name,
             );
             if (!found && collection.isExtension)
               throw new SyncError(
@@ -184,7 +210,7 @@ export async function applyPlan(
                 );
               }
             }
-            if (found.name !== mode.name && !collection.isExtension)
+            if (found.name !== mode.name && (!collection.isExtension || !!mode.parentMode))
               collection.renameMode(found.modeId, mode.name);
             registry.modes[mapKey] = found.modeId;
             modeIds.set(keyOf(op.desired.name, mode.key), found.modeId);
@@ -222,11 +248,17 @@ export async function applyPlan(
       }
       try {
         const collection = adapter.collections.get(collectionId)!;
-        const variable = op.targetId
-          ? adapter.variables.get(op.targetId)!
+        const targetId = op.inheritedFrom ? variableIds.get(op.inheritedFrom) : op.targetId;
+        if (collection.isExtension && (!targetId || !collection.variableIds.includes(targetId)))
+          throw new SyncError(
+            'EXTENSION_VARIABLE',
+            'The inherited variable could not be prepared.',
+          );
+        const variable = targetId
+          ? adapter.variables.get(targetId)!
           : adapter.createVariable(op.desired.name, collection, op.desired.type);
         variableIds.set(op.key, variable.id);
-        if (!op.targetId) {
+        if (!targetId) {
           variable.description = op.desired.description ?? '';
           save(op, 'variable', variable.id, undefined, 'partial');
         }
@@ -283,6 +315,24 @@ export async function applyPlan(
             throw new SyncError('ALIAS_MISSING', 'An alias target failed to sync.');
           const value = alias ? adapter.api.variables.createVariableAlias(alias) : spec.literal;
           desiredValues[modeId] = value;
+          if (collection.isExtension) {
+            const extension = collection as unknown as ExtendedVariableCollection;
+            const parent = adapter.collections.get(extension.parentVariableCollectionId);
+            const parentModeId = extension.modes.find((m) => m.modeId === modeId)?.parentModeId;
+            const parentValues = parent?.isExtension
+              ? await variable.valuesByModeForCollectionAsync(parent)
+              : variable.valuesByMode;
+            if (parentModeId && equal(parentValues[parentModeId], value)) {
+              if (
+                Object.prototype.hasOwnProperty.call(
+                  extension.variableOverrides?.[variable.id] ?? {},
+                  modeId,
+                )
+              )
+                variable.removeOverrideForMode(modeId);
+              continue;
+            }
+          }
           if (!equal(values[modeId], value)) variable.setValueForMode(modeId, value);
         }
         if (!collection.isExtension && variable.name !== op.desired.name)
