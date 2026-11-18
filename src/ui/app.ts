@@ -89,6 +89,16 @@ let recoveryField = '';
 let repositoryURL = '';
 let windowSize = savedWindowSize(undefined);
 let branchDraft = '';
+type BranchMenu = {
+  request: AbortController;
+  result?: Awaited<ReturnType<RepositoryClient['listBranches']>>;
+  failed?: boolean;
+};
+let branchMenu: BranchMenu | undefined;
+function closeBranchMenu() {
+  branchMenu?.request.abort();
+  branchMenu = undefined;
+}
 let dialog: 'branch' | 'send' | 'report' | 'issues' | 'conflicts' | undefined;
 let diagnosticPath = '';
 let sendMenuOpen = false;
@@ -692,6 +702,13 @@ async function openSend(output?: 'variables' | 'styles') {
     await refreshPreview();
   } else render();
 }
+function branchMenuView() {
+  if (!branchMenu || !connection) return '';
+  const { result, failed } = branchMenu;
+  const active = connection.branch;
+  const names = [...new Set([active, ...(result?.names ?? [])])];
+  return `<div class="menu branch-menu" id="branch-options" aria-label="Repository branches" data-scroll="branches">${names.map((name) => `<button data-action="choose-branch" data-branch="${esc(name)}"${name === active ? ' aria-current="true"' : ''}><span class="branch-check">${name === active ? icon('check') : ''}</span><span>${esc(name)}${name === result?.defaultBranch ? ' (default)' : ''}</span></button>`).join('')}${failed ? '<p role="status">Could not load branches.</p><button data-action="manual-branch">Enter branch name…</button>' : !result ? '<p role="status">Loading branches…</p>' : ''}</div>`;
+}
 function mainView() {
   const groups = collectionGroups();
   if (scope && !groups.includes(scope)) scope = '';
@@ -702,12 +719,12 @@ function mainView() {
     (d) => d.level !== 'info',
   ).length;
   const c = connection;
-  return `<main class="main workspace companion-workspace"><section class="source-row"><span class="source-icon">${icon('git')}</span><div class="source-text"><button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.name || c?.repository)}</span>${icon('chevron')}</button></div>${settingsMenu()}</section>
+  return `<main class="main workspace companion-workspace"><section class="source-row"><span class="source-icon">${c && !sample ? providerLogo(c.provider) : icon('git')}</span><div class="source-text"><button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.name || c?.repository)}</span>${icon('chevron')}</button></div>${settingsMenu()}</section>
   ${tab !== 'variables' ? `<div class="secondary-heading"><button class="quiet tiny" data-tab="variables">← Variables</button><strong>Styles</strong></div>` : ''}${browserToolbar()}
   <div class="feedback">${dialog === 'branch' ? '' : progressView() + errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}</div>
   <section class="browser-content" aria-label="${tab === 'styles' ? 'Styles' : 'Variables'}" aria-busy="${busy()}">${tab === 'variables' ? variableView() : styleView()}</section>
   ${issues || conflicts ? `<div class="export-warnings">${conflicts ? `<button class="quiet error-color" data-action="conflicts">${conflicts} conflicts · Review</button>` : ''}${issues ? `<button class="quiet" data-action="issues">Export warnings <span class="count-pill">${issues}</span> ${icon('chevron')}</button>` : ''}</div>` : ''}
-  </main><footer class="footer workspace-footer companion-footer"><div class="footer-row">${busy() ? `<button data-action="cancel"${disabled(phase === 'previewing')}>Stop</button>` : `<div class="source-actions"><button class="branch-button" data-action="${c?.provider === 'gitlab' && !sample ? 'open-branch' : 'edit'}" aria-label="${sample ? 'Connect repository' : c?.provider === 'gitlab' ? 'Switch branch' : 'Edit repository connection'}">${icon('branch')}<span>${esc(sample ? 'Sample' : (c?.branch ?? 'main'))}</span>${icon('chevron')}</button><button class="icon-button" data-action="fetch" title="${sample ? 'Reload sample' : 'Fetch updates'}" aria-label="${sample ? 'Reload sample' : 'Fetch updates'}">${icon('refresh')}</button></div>`}<div class="send-actions"><button class="sync-button" data-action="send"${disabled(busy() || !project)}>${icon('arrow')}${demo ? 'Export preview' : 'Send to Figma'}</button><button class="icon-button" data-action="send-menu" aria-label="Choose output to send" aria-expanded="${sendMenuOpen}"${disabled(busy() || !project)}>${icon('chevron')}</button>${sendMenuOpen ? '<div class="menu send-menu"><button data-action="send-variables">Send variables only</button><button data-action="send-styles">Send styles only</button></div>' : ''}</div></div></footer>${sendDialogView()}`;
+  </main><footer class="footer workspace-footer companion-footer"><div class="footer-row">${busy() ? `<button data-action="cancel"${disabled(phase === 'previewing')}>Stop</button>` : `<div class="source-actions"><button class="branch-button" data-action="${c && !sample ? 'open-branch' : 'edit'}" aria-label="${sample ? 'Connect repository' : c ? 'Switch branch' : 'Edit repository connection'}"${c && !sample ? ` aria-expanded="${!!branchMenu}"${branchMenu ? ' aria-controls="branch-options"' : ''}` : ''}>${icon('branch')}<span>${esc(sample ? 'Sample' : (c?.branch ?? 'main'))}</span>${icon('chevron')}</button><button class="icon-button" data-action="fetch" title="${sample ? 'Reload sample' : 'Fetch updates'}" aria-label="${sample ? 'Reload sample' : 'Fetch updates'}">${icon('refresh')}</button>${branchMenuView()}</div>`}<div class="send-actions"><button class="sync-button" data-action="send"${disabled(busy() || !project)}>${icon('arrow')}${demo ? 'Export preview' : 'Send to Figma'}</button><button class="icon-button" data-action="send-menu" aria-label="Choose output to send" aria-expanded="${sendMenuOpen}"${disabled(busy() || !project)}>${icon('chevron')}</button>${sendMenuOpen ? '<div class="menu send-menu"><button data-action="send-variables">Send variables only</button><button data-action="send-styles">Send styles only</button></div>' : ''}</div></div></footer>${sendDialogView()}`;
 }
 let renderedScreen = '';
 const scrollMemory = new Map<string, { top: number; left: number }>();
@@ -717,6 +734,7 @@ const focusAttributes = [
   'name',
   'data-action',
   'data-tab',
+  'data-branch',
   'data-browse-filter',
   'data-row',
   'data-open-token',
@@ -1064,6 +1082,10 @@ app.addEventListener('change', async (event) => {
 app.addEventListener('click', async (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
   if (!button) {
+    if (branchMenu && !(event.target as HTMLElement).closest('.source-actions')) {
+      closeBranchMenu();
+      render();
+    }
     if (
       (menuOpen || sendMenuOpen) &&
       !(event.target as HTMLElement).closest('.menu-anchor, .send-actions')
@@ -1098,6 +1120,13 @@ app.addEventListener('click', async (event) => {
   )
     return;
   if (button.dataset.action !== 'menu') menuOpen = false;
+  if (
+    branchMenu &&
+    !['open-branch', 'choose-branch', 'manual-branch'].includes(button.dataset.action ?? '')
+  ) {
+    closeBranchMenu();
+    render();
+  }
   try {
     if (button.dataset.openToken) {
       const target = [...(preview?.variables ?? []), ...(preview?.styles ?? [])].find(
@@ -1321,8 +1350,38 @@ app.addEventListener('click', async (event) => {
         render();
         break;
       }
-      case 'open-branch':
-        if (!connection || connection.provider !== 'gitlab') break;
+      case 'open-branch': {
+        if (!connection || sample) break;
+        if (branchMenu) {
+          closeBranchMenu();
+          render();
+          break;
+        }
+        sendMenuOpen = false;
+        const menu: BranchMenu = { request: new AbortController() };
+        branchMenu = menu;
+        render();
+        try {
+          client ??= repositoryClient(connection);
+          menu.result = await client.listBranches(menu.request.signal);
+        } catch {
+          menu.failed = true;
+        }
+        if (branchMenu === menu) render();
+        break;
+      }
+      case 'choose-branch': {
+        if (!connection || !branchMenu || !button.dataset.branch) break;
+        const branch = button.dataset.branch;
+        closeBranchMenu();
+        if (branch !== connection.branch) await connectRepository({ ...connection, branch });
+        else render();
+        focusAction('open-branch');
+        break;
+      }
+      case 'manual-branch':
+        if (!connection) break;
+        closeBranchMenu();
         branchDraft = connection.branch;
         error = '';
         notice = '';
@@ -1441,7 +1500,11 @@ app.addEventListener('keydown', (event) => {
   if (windowResizer.keydown(event)) return;
   if (valueInspector.keydown(event)) return;
   if (dialog) return;
-  if (event.key === 'Escape' && (menuOpen || sendMenuOpen)) {
+  if (event.key === 'Escape' && branchMenu) {
+    closeBranchMenu();
+    render();
+    focusAction('open-branch');
+  } else if (event.key === 'Escape' && (menuOpen || sendMenuOpen)) {
     sendMenuOpen = false;
     const action = menuOpen ? 'menu' : 'send-menu';
     menuOpen = false;
@@ -1457,6 +1520,7 @@ app.addEventListener('keydown', (event) => {
 });
 app.addEventListener('submit', (event) => event.preventDefault());
 window.addEventListener('pagehide', () => {
+  closeBranchMenu();
   abort?.abort();
 });
 

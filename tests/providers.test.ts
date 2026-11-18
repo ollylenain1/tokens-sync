@@ -55,6 +55,25 @@ test('GitHub reads a commit-pinned nested directory and never sends write reques
     assert(!call.url.includes(config.token));
   }
 });
+test('GitHub reads the default branch and all pages from the configured host', async () => {
+  const client = new RepositoryClient(config, async (input, options) => {
+    const url = new URL(String(input));
+    assert.equal(url.origin, 'https://api.github.com');
+    assert.equal(options?.method, 'GET');
+    if (url.pathname === '/repos/team/tokens') return json({ default_branch: 'trunk' });
+    assert.equal(url.pathname, '/repos/team/tokens/branches');
+    if (url.searchParams.get('page') === '1')
+      return json([{ name: 'feature/colors' }], 200, {
+        Link: '<https://example.test/branches?page=2>; rel="next"',
+      });
+    assert.equal(url.searchParams.get('page'), '2');
+    return json([{ name: 'trunk' }]);
+  });
+  assert.deepEqual(await client.listBranches(), {
+    names: ['feature/colors', 'trunk'],
+    defaultBranch: 'trunk',
+  });
+});
 test('GitHub single-file storage reads sibling metadata and tolerates missing themes only', async () => {
   const client = new RepositoryClient({ ...config, path: 'design/tokens.json' }, async (input) => {
     const url = String(input);

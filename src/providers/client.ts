@@ -274,6 +274,44 @@ export class RepositoryClient {
       );
     return data.default_branch;
   }
+  async listBranches(signal?: AbortSignal): Promise<{ names: string[]; defaultBranch?: string }> {
+    await this.resolveEnterpriseProject(signal);
+    const github = this.connection.provider === 'github';
+    const route = this.repoPath + (github ? '/branches' : '/repository/branches');
+    const names = new Set<string>();
+    let defaultBranch = github ? await this.defaultBranch(signal) : undefined;
+    for (let page = 1; ; page++) {
+      const { text, headers } = await this.request(
+        route + '?per_page=100&page=' + page,
+        false,
+        signal,
+      );
+      let branches;
+      try {
+        branches = JSON.parse(text);
+        if (
+          !Array.isArray(branches) ||
+          branches.some((branch) => typeof branch?.name !== 'string' || !branch.name)
+        )
+          throw new Error();
+      } catch {
+        throw new ProviderError('RESPONSE', 'The provider returned an invalid branch list.');
+      }
+      const previousCount = names.size;
+      for (const branch of branches) {
+        names.add(branch.name);
+        if (!github && branch.default === true) defaultBranch = branch.name;
+      }
+      const nextPage = headers.get('x-next-page');
+      const links = headers.get('link');
+      const hasNext =
+        nextPage !== null ? !!nextPage : links ? /rel="next"/.test(links) : branches.length === 100;
+      if (!hasNext || !branches.length) break;
+      if (names.size === previousCount)
+        throw new ProviderError('RESPONSE', 'The provider repeated a page of branches.');
+    }
+    return { names: [...names], defaultBranch };
+  }
   async revision(signal?: AbortSignal): Promise<string> {
     await this.resolveEnterpriseProject(signal);
     const c = this.connection;

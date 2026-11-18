@@ -2296,3 +2296,36 @@ button:active:not(:disabled) {
     grid-template-columns: 1fr;
   }
 }
+
+.companion-footer .source-actions {
+  position: relative;
+}
+
+.branch-menu {
+  z-index: 3;
+  inset: auto auto calc(100% + 7px) 0;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: min(260px, 50vh);
+  overflow: auto;
+}
+
+.branch-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.branch-menu p {
+  padding: 6px 8px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.branch-check {
+  display: inline-flex;
+  flex: 0 0 16px;
+}

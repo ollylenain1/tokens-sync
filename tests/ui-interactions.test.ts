@@ -137,8 +137,6 @@ async function openUI(
     click,
     change,
     search,
-    enterBranch: (value: string) =>
-      handlers.get('input')!({ target: { id: 'branch-name', value, dataset: {} } }),
     resizeKey: async (key: string) => {
       await handlers.get('keydown')!({
         target: { closest: () => ({}) },
@@ -476,6 +474,13 @@ test('GitLab setup mirrors project-path fields and validates content before savi
   const ui = await openUI(false, undefined, async (input) => {
     const url = String(input);
     urls.push(url);
+    if (url.includes('/repository/branches?'))
+      return Response.json([
+        { name: 'main', default: true },
+        { name: 'feature/colors' },
+        { name: 'missing' },
+        { name: 'release/design' },
+      ]);
     if (url.endsWith('/commits/missing')) return new Response('{}', { status: 404 });
     if (url.includes('/commits/')) return new Response(JSON.stringify({ id: 'a'.repeat(40) }));
     if (url.includes('%24')) return new Response('{}', { status: 404 });
@@ -513,15 +518,16 @@ test('GitLab setup mirrors project-path fields and validates content before savi
   assert.match(ui.app.innerHTML, /Team design tokens/);
   assert.match(ui.app.innerHTML, /class="branch-button" data-action="open-branch"/);
   await ui.click({ action: 'open-branch' });
-  assert.match(ui.app.innerHTML, /id="branch-form"/);
+  assert.match(ui.app.innerHTML, /id="branch-options"/);
+  assert.match(ui.app.innerHTML, /main \(default\)/);
+  assert.match(ui.app.innerHTML, /data-branch="feature\/colors" aria-current="true"/);
   assert.doesNotMatch(ui.app.innerHTML, /id="connection-form"/);
-  await ui.enterBranch('missing');
-  await ui.click({ action: 'switch-branch' });
+  await ui.click({ action: 'choose-branch', branch: 'missing' });
   assert.match(ui.app.innerHTML, /role="alert"/);
   assert.match(ui.app.innerHTML, /<span>feature\/colors<\/span>/);
   assert.equal(ui.requests.filter((r) => r.type === 'saveConnection').length, 1);
-  await ui.enterBranch('release/design');
-  await ui.click({ action: 'switch-branch' });
+  await ui.click({ action: 'open-branch' });
+  await ui.click({ action: 'choose-branch', branch: 'release/design' });
   const saves = ui.requests.filter((r) => r.type === 'saveConnection');
   assert.deepEqual(saves[1]?.connection, { ...saved.connection, branch: 'release/design' });
   assert(urls.some((url) => url.endsWith('/commits/release%2Fdesign')));
