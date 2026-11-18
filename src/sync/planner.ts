@@ -48,6 +48,7 @@ function target<T extends { id: string; key?: string; name: string }>(
   pool: T[],
   mapping: Mapping | undefined,
   choice: string | undefined,
+  localTargets: T[] = pool,
 ): { target?: T; action?: Action; reason?: string; candidates?: { id: string; name: string }[] } {
   // Explicit value replacement retains the normal identity resolution rules.
   if (choice === 'repository') choice = undefined;
@@ -90,9 +91,14 @@ function target<T extends { id: string; key?: string; name: string }>(
           candidates: candidates(),
         };
   }
-  if (desired.sourceIds.length) {
-    const found = pool.filter((p) => desired.sourceIds.some((id) => p.id === id || p.key === id));
+  // Tokens Studio IDs and keys can refer to objects in a different Figma file.
+  const localHints = desired.sourceIds.length
+    ? localTargets.filter((p) => desired.sourceIds.some((id) => p.id === id || p.key === id))
+    : [];
+  if (localHints.length) {
+    const found = localHints.filter((p) => pool.includes(p));
     if (
+      localHints.length === 1 &&
       found.length === 1 &&
       desired.sourceIds.every((id) => found[0].id === id || found[0].key === id)
     ) {
@@ -108,9 +114,9 @@ function target<T extends { id: string; key?: string; name: string }>(
     return {
       action: 'conflicting',
       reason:
-        found.length > 1
-          ? 'Source themes disagree about the mapped target. Select one target explicitly.'
-          : 'A Tokens Studio mapping is unavailable in this file. Select a compatible local target, create a new one, or skip.',
+        found.length === 0
+          ? 'A Tokens Studio mapping points to an incompatible local target. Select a compatible target, create a new one, or skip.'
+          : 'Source themes disagree about the mapped target. Select one target explicitly.',
       candidates: candidates(),
     };
   }
@@ -225,7 +231,10 @@ export function planSync(
     if (
       desired.sourceIds.length > 1 &&
       !choices[desired.key] &&
-      !mappingFor(registry, model, desired.key)
+      !mapping &&
+      state.collections.some((item) =>
+        desired.sourceIds.some((id) => item.id === id || item.key === id),
+      )
     ) {
       op.action = 'conflicting';
       op.reason =
@@ -293,7 +302,7 @@ export function planSync(
         (inherited ? inherited.variableIds.includes(v.id) : v.collectionId === collection.targetId),
     );
     const mapping = mappingFor(registry, model, desired.key);
-    const match = target(desired, pool, mapping, choices[desired.key]);
+    const match = target(desired, pool, mapping, choices[desired.key], state.variables);
     const op: Operation<DesiredVariable> = {
       key: desired.key,
       desired,
@@ -469,6 +478,7 @@ export function planSync(
       state.styles.filter((s) => s.kind === desired.kind),
       mappingFor(registry, model, desired.key),
       choices[desired.key],
+      state.styles,
     );
     const op: Operation<DesiredStyle> = {
       key: desired.key,

@@ -162,26 +162,41 @@ test('reliable source key mapping preserves a renamed variable identity', async 
   assert.equal(variable.name, 'corner');
   assert.equal(mock.variables.filter((v) => ['radius', 'corner'].includes(v.name)).length, 1);
 });
-test('missing source mappings require explicit recovery and do not duplicate silently', async () => {
+test('foreign Tokens Studio mapping hints allow import and subsequent sync in a new file', async () => {
   const mock = mockFigma(),
     source = {
-      base: { x: { type: 'number', value: 1 } },
+      base: {
+        x: { type: 'number', value: 1 },
+        y: { type: 'number', value: '{x}' },
+      },
       $themes: [
         {
           id: 'base',
           name: 'Default',
           group: 'Base',
           selectedTokenSets: { base: 'enabled' },
-          $figmaVariableReferences: { x: 'not-in-this-file' },
+          $figmaCollectionId: 'VariableCollectionId:foreign',
+          $figmaModeId: 'foreign-mode',
+          $figmaVariableReferences: { x: 'foreign-x', y: 'foreign-y' },
         },
       ],
     };
-  const plan = await preview(mock, source);
-  assert.equal(plan.variables[0].action, 'conflicting');
-  const resolved = await preview(mock, source, defaultSettings, {
-    [plan.variables[0].key]: 'create',
-  });
-  assert.equal(resolved.variables[0].action, 'new');
+  const { plan, report } = await run(mock, source);
+  assert.equal(plan.collections[0].action, 'new');
+  assert(plan.variables.every((op) => op.action === 'new'));
+  assert.equal(report.failed, 0);
+  const x = mock.variables.find((variable) => variable.name === 'x');
+  const y = mock.variables.find((variable) => variable.name === 'y');
+  assert.deepEqual(Object.values(y.valuesByMode), [{ type: 'VARIABLE_ALIAS', id: x.id }]);
+  const repeated = await preview(mock, source);
+  assert.equal(repeated.counts.variables.unchanged, 2);
+
+  const otherFile = mockFigma();
+  const otherCollection = otherFile.createCollection('Unrelated');
+  const incompatible = otherFile.createVariable('x', otherCollection, 'FLOAT');
+  source.$themes[0].$figmaVariableReferences.x = incompatible.key;
+  const conflict = await preview(otherFile, source);
+  assert.equal(conflict.variables.find((op) => op.desired.name === 'x')?.action, 'conflicting');
 });
 test('ambiguous name matches require an explicit target choice', async () => {
   const mock = mockFigma(),
