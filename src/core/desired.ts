@@ -11,7 +11,6 @@ import {
   Token,
   TokenProject,
   VariableType,
-  equal,
   figmaName,
   keyOf,
   record,
@@ -166,7 +165,6 @@ export async function buildDesired(
     };
   });
   const variables = new Map<string, DesiredVariable>();
-  const sources = new Map<string, Token>();
   const origins = new Map<string, { resolver: TokenResolver; token: Token }[]>();
   const issue = (error: unknown, token: Token, theme: Theme) =>
     diagnostics.push({
@@ -214,7 +212,6 @@ export async function buildDesired(
               description: token.description,
             };
             variables.set(key, variable);
-            sources.set(key, source);
           }
           if (variable.type !== converted.type) {
             issue(
@@ -247,18 +244,11 @@ export async function buildDesired(
     if (own?.type === type && own.values[resolver.theme.id]) return ownKey;
     const source = resolver.tokens.get(path);
     if (!source) return;
-    let expected: unknown;
-    try {
-      expected = primitive(source, resolver.resolve(path), settings.rootFontSize)?.literal;
-    } catch {
-      return;
-    }
     const candidates = [...variables.values()].filter(
       (v) =>
         v.path === path &&
         v.type === type &&
-        sources.get(v.key)?.set === source.set &&
-        Object.values(v.values).every((x) => equal(x.literal, expected)),
+        origins.get(v.key)?.some((origin) => origin.token.set === source.set),
     );
     if (candidates.length === 1) return candidates[0].key;
   };

@@ -227,6 +227,26 @@ test('aliases preserve native references across collections and modes', async ()
   const paper = mock.variables.find((v) => v.name === 'color/paper');
   assert(Object.values(surface.valuesByMode).some((v: any) => v.id === paper.id));
 });
+test('semantic aliases bind to one primitive across differently valued source modes', async () => {
+  const source = {
+    day: { base: { type: 'color', value: '#fff' } },
+    night: { base: { type: 'color', value: '#000' } },
+    ui: { surface: { type: 'color', value: '{base}' } },
+    $themes: [
+      { name: 'Day', group: 'Primitives', selectedTokenSets: { day: 'enabled' } },
+      { name: 'Night', group: 'Primitives', selectedTokenSets: { night: 'enabled' } },
+      { name: 'Default', group: 'Semantic', selectedTokenSets: { night: 'source', ui: 'enabled' } },
+    ],
+  };
+  const mock = mockFigma();
+  const { report } = await run(mock, source);
+  assert.equal(report.failed, 0);
+  const base = mock.variables.find((v) => v.name === 'base');
+  const surface = mock.variables.find((v) => v.name === 'surface');
+  assert.equal(Object.keys(base.valuesByMode).length, 2);
+  assert.deepEqual(Object.values(surface.valuesByMode), [{ type: 'VARIABLE_ALIAS', id: base.id }]);
+  assert((await preview(mock, source)).variables.every((v) => v.action === 'unchanged'));
+});
 test('missing references leave existing targets untouched', async () => {
   const mock = mockFigma();
   await run(mock, { x: { type: 'number', value: 1 } });

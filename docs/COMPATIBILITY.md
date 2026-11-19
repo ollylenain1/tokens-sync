@@ -45,7 +45,7 @@ Theme-specific naming enforces `{group}`, `{theme}` and `{token}` identity bound
 
 Text bindings cover compatible family/style strings, font size, pixel line height/letter spacing and paragraph metrics. Numeric font weight is resolved to an installed style rather than bound automatically. Effect bindings cover color, blur radius, spread and offsets. Solid paint and gradient stop color references use the documented native bindings. Opacity multiplication and arithmetic cannot be represented as variable expressions and remain literals. A reference-only set does not create a variable; such references are inlined unless a unique compatible exported variable exists in another selected collection.
 
-Cross-collection aliases are preserved only when provenance and values establish a unique compatible target. A cross-group target with differing mode values is not guessed; it is resolved to the selected theme’s literal. Styles-only linked export requires existing variables to match the requested source values; otherwise enable variable sync or use theme-specific styles.
+Cross-collection aliases bind to the unique exported variable with the referenced path, compatible type, and matching source set in any mode. The alias follows the active mode of the target collection. If several collections qualify, Blueprint keeps the resolved literal. Styles-only linked export requires existing variables to match the requested source values; otherwise enable variable sync or use theme-specific styles.
 
 Local style bindings are preserved by default, including when they intentionally override a repository literal. Incompatible bindings or removal of their target property require review. Existing node bindings remain untouched; no scene graph is scanned.
 
