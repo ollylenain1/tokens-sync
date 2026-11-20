@@ -625,6 +625,63 @@ function missingTargets() {
     (row) => row.action === 'conflicting' && row.missingTarget,
   );
 }
+function sendSelection() {
+  const groups = collectionGroups();
+  const themes = project?.themes ?? [];
+  const selectedIds = new Set(
+    themes
+      .filter(
+        (t) => isIncluded(settings.groups, t.group) && !settings.excludedThemeIds?.includes(t.id),
+      )
+      .map((t) => t.id),
+  );
+  return { groups, themes, selectedIds };
+}
+function sendBlocked() {
+  return (
+    demo ||
+    !sendSelection().selectedIds.size ||
+    busy() ||
+    !preview?.canSync ||
+    conflictCount(preview) > 0 ||
+    (!settings.variables && !settings.styles)
+  );
+}
+function sendLabel() {
+  return phase === 'syncing'
+    ? 'Sending…'
+    : demo
+      ? 'Preview only'
+      : sample
+        ? 'Apply sample to this file'
+        : 'Send to Figma';
+}
+function sendFeedbackView() {
+  return `<p class="small" role="status">${phase === 'previewing' ? 'Updating preview…' : preview ? `${changeCount(preview)} pending changes.` : 'Preview unavailable.'}</p><div class="send-review-actions"><button class="quiet tiny" data-action="issues"${preview?.diagnostics.length ? '' : ' style="visibility:hidden"'}${disabled()}>${omittedCount(preview) ? 'Review skipped values' : 'Review export'}</button><button class="quiet tiny error-color" data-action="conflicts"${conflictCount(preview) ? '' : ' style="visibility:hidden"'}${disabled()}>Resolve conflicts</button></div>`;
+}
+function updateSendDialog(modal: HTMLDialogElement) {
+  const { themes, selectedIds } = sendSelection();
+  for (const input of modal.querySelectorAll<HTMLInputElement>('.send-groups input')) {
+    const options = input.dataset.sendAll
+      ? themes
+      : input.dataset.group !== undefined
+        ? themes.filter((theme) => theme.group === input.dataset.group)
+        : themes.filter((theme) => theme.id === input.dataset.sendTheme);
+    const count = options.filter((theme) => selectedIds.has(theme.id)).length;
+    input.checked = count > 0 && count === options.length;
+    input.indeterminate = count > 0 && count < options.length;
+    input.disabled = busy() && phase !== 'previewing';
+  }
+  const feedback = modal.querySelector<HTMLElement>('[data-send-feedback]')!;
+  const markup = sendFeedbackView();
+  if (feedback.innerHTML !== markup) feedback.innerHTML = markup;
+  const errors = modal.querySelector<HTMLElement>('[data-send-error]')!;
+  if (errors.innerHTML !== errorView()) errors.innerHTML = errorView();
+  modal.querySelector<HTMLButtonElement>('[data-action="close-dialog"]')!.disabled = busy();
+  const confirm = modal.querySelector<HTMLButtonElement>('[data-action="confirm-send"]')!;
+  confirm.disabled = sendBlocked();
+  confirm.textContent = sendLabel();
+}
 function sendDialogView() {
   if (!dialog) return '';
   if (dialog === 'branch')
@@ -643,30 +700,22 @@ function sendDialogView() {
   }
   if (dialog === 'report')
     return `<dialog class="sync-dialog result-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Last sync result</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close result">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${reportView()}</div></dialog>`;
-  const groups = collectionGroups();
-  const themes = project?.themes ?? [];
-  const selectedIds = new Set(
-    themes
-      .filter(
-        (t) => isIncluded(settings.groups, t.group) && !settings.excludedThemeIds?.includes(t.id),
-      )
-      .map((t) => t.id),
-  );
+  const { groups, themes, selectedIds } = sendSelection();
   function selectionState(count: number, total: number) {
     return (
       checked(count > 0 && count === total) +
       (count > 0 && count < total ? ' data-mixed' : '') +
-      disabled()
+      disabled(busy() && phase !== 'previewing')
     );
   }
   const tree = groups
     .map((group) => {
       const options = themes.filter((t) => t.group === group);
       const count = options.filter((t) => selectedIds.has(t.id)).length;
-      return `<div class="send-group"><label class="inclusion-row"><input type="checkbox" data-group="${esc(group)}"${selectionState(count, options.length)}><span>${esc(group)}</span></label>${options.map((t) => `<label class="inclusion-row send-option"><input type="checkbox" data-send-theme="${esc(t.id)}"${checked(selectedIds.has(t.id))}${disabled()}><span>${esc(t.name)}</span></label>`).join('')}</div>`;
+      return `<div class="send-group"><label class="inclusion-row"><input type="checkbox" data-group="${esc(group)}"${selectionState(count, options.length)}><span>${esc(group)}</span></label>${options.map((t) => `<label class="inclusion-row send-option"><input type="checkbox" data-send-theme="${esc(t.id)}"${checked(selectedIds.has(t.id))}${disabled(busy() && phase !== 'previewing')}><span>${esc(t.name)}</span></label>`).join('')}</div>`;
     })
     .join('');
-  return `<dialog class="sync-dialog" aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Choose which themes to send to Figma.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<section class="send-groups" aria-label="Theme groups and options" data-scroll="send-options"><label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>${tree}</section>${progressView()}${errorView()}${preview ? `<p class="small">${changeCount(preview)} pending changes.</p>` : ''}${conflictCount(preview) ? '<p class="error-color">Resolve conflicts before sending.</p><button data-action="conflicts">Review conflicts</button>' : ''}${preview?.diagnostics.length ? `<div class="export-review-link">${omittedCount(preview) ? '<span class="warning">Some token values will be skipped.</span>' : ''}<button class="quiet tiny" data-action="issues">Review export</button></div>` : ''}</div><footer class="dialog-footer">${phase === 'syncing' ? '<button data-action="cancel">Stop sync</button>' : ''}<button class="primary" data-action="confirm-send"${disabled(demo || !selectedIds.size || busy() || !preview?.canSync || conflictCount(preview) > 0 || (!settings.variables && !settings.styles))}>${busy() ? 'Preparing…' : demo ? 'Preview only' : sample ? 'Apply sample to this file' : 'Send to Figma'}</button></footer></dialog>`;
+  return `<dialog class="sync-dialog" data-send-dialog aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Choose which themes to send to Figma.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<section class="send-groups" aria-label="Theme groups and options" data-scroll="send-options"><label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>${tree}</section>${phase === 'syncing' ? progressView() : ''}<div data-send-error>${errorView()}</div><div class="send-feedback" data-send-feedback>${sendFeedbackView()}</div></div><footer class="dialog-footer">${phase === 'syncing' ? '<button data-action="cancel">Stop sync</button>' : ''}<button class="primary" data-action="confirm-send"${disabled(sendBlocked())}>${sendLabel()}</button></footer></dialog>`;
 }
 async function closeDialog() {
   if (dialog === 'branch') {
@@ -759,6 +808,14 @@ let pendingFocus:
   | { attribute: string; value: string; start: number | null; end: number | null }
   | undefined;
 function render() {
+  // Keep the open dialog, focused checkbox and scroll containers mounted while
+  // theme changes recalculate. Reopening a modal also resets browser focus.
+  const sendDialog =
+    dialog === 'send' && app.querySelector<HTMLDialogElement>('[data-send-dialog]');
+  if (sendDialog && phase !== 'syncing' && !sendDialog.querySelector('[data-action="cancel"]')) {
+    updateSendDialog(sendDialog);
+    return;
+  }
   selectMenus.beforeRender();
   valueInspector.beforeRender();
   const active = document.activeElement as HTMLInputElement | null;
@@ -883,15 +940,43 @@ function showError(cause: unknown) {
   phase = 'error';
   render();
 }
-async function refreshPreview(includeProject = false) {
-  if (!project) return;
+let previewRefresh: Promise<void> | undefined;
+let previewRevision = 0;
+let previewNeedsProject = false;
+function refreshPreview(includeProject = false): Promise<void> {
+  if (!project) return Promise.resolve();
+  previewRevision++;
+  previewNeedsProject ||= includeProject;
   phase = 'previewing';
   progress = { text: 'Resolving tokens and checking local mappings…', done: 0, total: 0 };
   render();
-  preview = await rpc('preview', { ...(includeProject ? { project } : {}), settings, choices });
-  phase = 'ready';
-  error = '';
-  render();
+  // The plugin processes one preview at a time. Coalesce rapid selections and
+  // never enable Send for a response that predates the latest selection.
+  previewRefresh ??= (async () => {
+    try {
+      while (true) {
+        const revision = previewRevision;
+        const include = previewNeedsProject;
+        previewNeedsProject = false;
+        let result: Preview;
+        try {
+          result = await rpc('preview', { ...(include ? { project } : {}), settings, choices });
+        } catch (cause) {
+          if (revision !== previewRevision) continue;
+          throw cause;
+        }
+        if (revision !== previewRevision) continue;
+        preview = result;
+        phase = 'ready';
+        error = '';
+        render();
+        return;
+      }
+    } finally {
+      previewRefresh = undefined;
+    }
+  })();
+  return previewRefresh;
 }
 async function connectRepository(input: Connection) {
   const normalized = normalizeConnection(input);

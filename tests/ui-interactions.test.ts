@@ -35,7 +35,7 @@ async function openUI(
     addEventListener: (event: string, handler: (event: any) => Promise<void>) =>
       handlers.set(event, handler),
     querySelectorAll: () => [],
-    querySelector: () => null,
+    querySelector: (_selector: string): any => null,
   };
   const parent = {
     postMessage: async ({ pluginMessage }: any) => {
@@ -153,8 +153,8 @@ async function openUI(
     fail: () => {
       fail = true;
     },
-    release: () => {
-      hold = false;
+    release: (keepHolding = false) => {
+      hold = keepHolding;
       release?.();
     },
   };
@@ -236,6 +236,82 @@ test('export confirmation sends only its current plan ID and closing restores pr
   assert.equal(typeof request.planId, 'string');
   assert(request.planId.length > 0);
   assert.deepEqual(Object.keys(request).sort(), ['id', 'planId', 'type']);
+});
+
+test('rapid theme selections are coalesced and cannot send an outdated preview', async () => {
+  const ui = await openUI();
+  await ui.click({ action: 'send' });
+  const before = ui.requests.filter((request) => request.type === 'preview').length;
+  ui.hold();
+  const first = ui.change({ dataset: { sendTheme: 'dark' }, checked: false });
+  const second = ui.change({ dataset: { sendTheme: 'light' }, checked: false });
+  const third = ui.change({ dataset: { sendTheme: 'dark' }, checked: true });
+  assert.equal(ui.requests.filter((request) => request.type === 'preview').length, before + 1);
+  assert.doesNotMatch(ui.app.innerHTML, /data-send-theme="[^"]*"[^>]*disabled/);
+  await ui.click({ action: 'confirm-send' });
+  assert.equal(ui.requests.filter((request) => request.type === 'sync').length, 0);
+
+  ui.release(true);
+  await new Promise(setImmediate);
+  assert.equal(ui.requests.filter((request) => request.type === 'preview').length, before + 2);
+  assert.deepEqual(ui.requests.at(-1).settings.excludedThemeIds, ['light']);
+  assert.match(ui.app.innerHTML, /Updating preview/);
+  await ui.click({ action: 'confirm-send' });
+  assert.equal(ui.requests.filter((request) => request.type === 'sync').length, 0);
+
+  ui.release();
+  await Promise.all([first, second, third]);
+  assert.match(ui.app.innerHTML, /data-send-theme="dark" checked/);
+  assert.doesNotMatch(ui.app.innerHTML, /data-send-theme="light" checked/);
+  assert.match(ui.app.innerHTML, /data-action="confirm-send">Apply sample/);
+});
+
+test('theme updates keep the mounted dialog and controls, including when preview fails', async () => {
+  const ui = await openUI();
+  await ui.click({ action: 'send' });
+  const original = ui.app.innerHTML;
+  const inputs = [
+    { dataset: { sendAll: 'all' }, checked: true, indeterminate: false, disabled: false },
+    { dataset: { group: 'Interface' }, checked: true, indeterminate: false, disabled: false },
+    { dataset: { sendTheme: 'dark' }, checked: true, indeterminate: false, disabled: false },
+  ];
+  const feedback = { innerHTML: '' };
+  const errors = { innerHTML: '' };
+  const confirm = { disabled: false, textContent: '' };
+  const close = { disabled: false };
+  const elements: Record<string, unknown> = {
+    '[data-send-feedback]': feedback,
+    '[data-send-error]': errors,
+    '[data-action="confirm-send"]': confirm,
+    '[data-action="close-dialog"]': close,
+  };
+  const modal = {
+    querySelectorAll: () => inputs,
+    querySelector: (selector: string) => elements[selector] ?? null,
+  };
+  ui.app.querySelector = (selector: string) => (selector === '[data-send-dialog]' ? modal : null);
+  ui.hold();
+  const pending = ui.change({ dataset: { sendTheme: 'dark' }, checked: false });
+  assert.equal(ui.app.innerHTML, original);
+  assert.equal(inputs[2].checked, false);
+  assert.equal(inputs[0].indeterminate, true);
+  assert.equal(inputs[1].indeterminate, true);
+  assert(inputs.every((input) => !input.disabled));
+  assert.equal(confirm.disabled, true);
+  assert.match(feedback.innerHTML, /Updating preview/);
+  ui.release();
+  await pending;
+  assert.equal(ui.app.innerHTML, original);
+  assert.equal(confirm.disabled, false);
+  assert.match(feedback.innerHTML, /pending changes/);
+
+  ui.fail();
+  await ui.change({ dataset: { sendTheme: 'dark' }, checked: true });
+  assert.equal(ui.app.innerHTML, original);
+  assert.equal(confirm.disabled, true);
+  assert.equal(close.disabled, false);
+  assert(inputs.every((input) => !input.disabled));
+  assert.match(errors.innerHTML, /Preview failed/);
 });
 
 test('connection testing exposes an enabled Stop action and cancels its bridged provider request', async () => {
