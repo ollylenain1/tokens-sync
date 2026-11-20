@@ -219,9 +219,17 @@ code {
   font-size: var(--type-ui);
   font-weight: 600;
 }
-.brand .icon {
-  width: 15px;
-  height: 15px;
+.blueprint-mark {
+  flex: none;
+  width: auto;
+  height: 16px;
+  color: #1a2142;
+  color: color(display-p3 0.102 0.1294 0.2588);
+}
+.figma-dark .blueprint-mark,
+:root[data-preview-theme='dark'] .blueprint-mark {
+  color: #cdf5e8;
+  color: color(display-p3 0.8039 0.9608 0.9098);
 }
 .brand-sub {
   font-size: var(--type-secondary);
@@ -1568,26 +1576,6 @@ code {
   font-size: var(--type-secondary);
 }
 
-.detail-values {
-  margin: 8px 0;
-  font-size: var(--type-secondary);
-}
-.detail-values > div {
-  display: grid;
-  grid-template-columns: 60px minmax(0, 1fr);
-  gap: 8px;
-  margin: 4px 0;
-}
-.detail-values dt {
-  color: var(--muted);
-}
-.detail-values dd {
-  font-family: var(--mono);
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .source-heading {
   display: flex;
   align-items: center;
@@ -1650,7 +1638,6 @@ button:active:not(:disabled) {
   font-size: var(--type-ui);
 }
 .summary table,
-.detail-values,
 .reference-detail {
   font-size: var(--type-secondary);
 }

@@ -6,9 +6,10 @@ export interface InspectionPage {
   label: string;
   value?: Literal;
   summary?: string;
-  aliases: { field: string; name: string; group?: string }[];
+  aliases: { field: string; name: string; key?: string; group?: string }[];
 }
 export interface ValueInspection {
+  key: string;
   name: string;
   group: string;
   pages: InspectionPage[];
@@ -22,7 +23,7 @@ export function inspectValue(
   if (!preview) return;
   const alias = (field: string, targetKey: string) => {
     const target = preview.variables.find((row) => row.key === targetKey);
-    return { field, name: target?.name ?? targetKey, group: target?.group };
+    return { field, key: target?.key, name: target?.name ?? targetKey, group: target?.group };
   };
   const variable = preview.variables.find((row) => row.key === key);
   if (variable) {
@@ -30,6 +31,7 @@ export function inspectValue(
       preview.collections.find((row) => row.name === variable.group)?.modes ??
       Object.keys(variable.values).map((mode) => ({ key: mode, name: mode }));
     return {
+      key,
       name: variable.name,
       group: variable.group,
       pages: modes.map((mode) => ({
@@ -45,6 +47,7 @@ export function inspectValue(
   const style = preview.styles.find((row) => row.key === key);
   if (style)
     return {
+      key,
       name: style.name,
       group: style.group,
       pages: [
@@ -159,7 +162,7 @@ export function createValueInspector(app: HTMLElement, getPreview: () => Preview
       ${inspection.pages.length > 1 ? `<div class="inspector-pager"><button class="quiet icon-button" data-inspector-action="previous" aria-label="Previous mode">‹</button><span aria-label="Mode ${pageIndex + 1} of ${inspection.pages.length}">${pageIndex + 1}/${inspection.pages.length}</span><button class="quiet icon-button" data-inspector-action="next" aria-label="Next mode">›</button></div>` : ''}
       <button class="quiet icon-button inspector-close" data-inspector-action="close" aria-label="Close value details">×</button></div>
       <div class="inspector-body" aria-live="polite" aria-atomic="true"><span class="sr-only">${escape(page.label)}</span>
-      ${page.aliases.map((alias) => `<div class="inspector-field"><span class="inspector-label">${escape(alias.field)}</span><span class="inspector-alias" title="${escape(alias.group ?? '')}"><span aria-hidden="true">→</span><span>${escape(alias.name)}</span></span></div>`).join('')}
+      ${page.aliases.map((alias) => `<div class="inspector-field"><span class="inspector-label">${escape(alias.field)}</span>${alias.key ? `<button class="inspector-alias" data-open-token="${escape(alias.key)}" data-origin-token="${escape(inspection!.key)}" title="Open ${escape(alias.name)}">→ ${escape(alias.name)}</button>` : `<span class="inspector-alias">${escape(alias.name)}</span>`}</div>`).join('')}
       <div class="inspector-field"><span class="inspector-label">${page.aliases.length ? 'Resolved' : 'Value'}</span><div class="inspector-literal">${literal(page.value, page.summary)}</div></div></div>
       <div class="inspector-context">${escape(inspection.name)} · ${escape(inspection.group)}</div>`;
     position();

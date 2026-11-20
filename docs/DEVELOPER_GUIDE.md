@@ -18,7 +18,7 @@ For example, a semantic token `color.action.background` can reference `{color.br
 
 1. Connect a GitHub or GitLab repository, including a configured HTTPS enterprise host. Select a branch and token file or directory; the interface includes a remote branch picker.
 2. Test the connection and fetch tokens. The fetch resolves a commit before downloading content so a moving branch cannot mix file revisions within one snapshot.
-3. Browse variables by collection and mode, or switch to styles. Search, the Changes/All filter, expanded rows and the value inspector help explain proposed values and aliases.
+3. Browse variables by collection and mode, or switch to styles. Search, the Changes/All filter, expandable style rows and the value inspector help explain proposed values and aliases.
 4. Open **Send to Figma**, select the export scope and variable/style output, and review warnings or conflicts. Collection and theme selection determine the export; browsing and searching do not.
 5. Confirm the write and inspect its result. The last result remains available for the session.
 

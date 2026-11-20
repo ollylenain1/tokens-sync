@@ -73,7 +73,7 @@ let scope = '',
   searchOpen = false,
   browseFilter = 'all',
   menuOpen = false;
-const expandedRows = new Set<string>();
+const expandedStyles = new Set<string>();
 let error = '',
   notice = '',
   report: SyncReport | undefined,
@@ -292,7 +292,7 @@ function topbar() {
         ? '<div class="sample-banner">Sample tokens · Applying these changes writes to this Figma file.</div>'
         : '')
     );
-  return `${banner}<header class="topbar"><div class="brand">${icon('grid')}<span>Blueprint</span><span class="brand-sub">Token Sync</span></div>${connectionStatus()}</header>`;
+  return banner + layout('topbar', { status: connectionStatus() });
 }
 function field(name: keyof Connection, label: string, placeholder = '', type = 'text', hint = '') {
   return `<label class="field"><span>${label}</span><input name="${name}" type="${type}" value="${esc(draft[name])}" placeholder="${esc(placeholder)}" autocomplete="${type === 'password' ? 'new-password' : 'off'}" spellcheck="false" ${disabled()} >${hint ? `<small>${hint}</small>` : ''}</label>`;
@@ -476,7 +476,8 @@ function valueTrigger(row: VariableRow | StyleRow, mode: { key: string; name: st
       diagnostic.token === row.path &&
       (diagnostic.level === 'warning' || diagnostic.level === 'error'),
   );
-  if (row.action === 'unchanged' && !hasIssue)
+  const hasAlias = 'values' in row && !!row.values[mode.key]?.alias;
+  if (row.action === 'unchanged' && !hasIssue && !hasAlias)
     return `<span class="value-display">${cellValue}</span>`;
   return `<button class="value-trigger" data-value="${esc(JSON.stringify([row.key, mode.key]))}" aria-label="${esc(`Inspect ${row.name}, ${mode.name}`)}" aria-haspopup="dialog" aria-controls="value-inspector" aria-expanded="false">${cellValue}</button>`;
 }
@@ -507,30 +508,10 @@ function specimenView(row: StyleRow) {
     ? `<figure class="style-specimen"><div class="specimen-stage"><div class="specimen-object ${row.type === 'PAINT' ? 'paint-specimen' : ''}" style="${esc(specimen.css)}" role="img" aria-label="${esc(specimen.label)}"></div></div><figcaption>${esc(specimen.label)}</figcaption></figure>`
     : '';
 }
-function rowDetails(row: VariableRow | StyleRow) {
+function styleDetails(row: StyleRow) {
   const notes = preview?.diagnostics.filter((diagnostic) => diagnostic.token === row.path) ?? [];
-  const bindings =
-    'values' in row
-      ? Object.entries(row.values)
-          .filter(([, value]) => value.alias)
-          .map(([mode, value]) => ({
-            label:
-              preview?.collections
-                .find((collection) => collection.name === row.group)
-                ?.modes.find((item) => item.key === mode)?.name ?? mode,
-            key: value.alias!,
-          }))
-      : row.bindings.map((binding) => ({ label: binding.field, key: binding.variable }));
-  return `<div class="row-details">${'values' in row ? '' : specimenView(row)}${diffView(row)}<div class="detail-label">${esc(row.type)} · ${esc(row.action)}</div><code>${esc(row.name)}</code><p class="small">Source: ${esc(row.group)} / ${esc(row.path)}</p>${row.description ? `<p>${esc(row.description)}</p>` : ''}${
-    'values' in row
-      ? `<dl class="detail-values">${Object.entries(row.values)
-          .map(
-            ([mode, value]) =>
-              `<div><dt>${esc(preview?.collections.find((collection) => collection.name === row.group)?.modes.find((item) => item.key === mode)?.name ?? mode)}</dt><dd>${esc(formatLiteral(value.literal))}</dd></div>`,
-          )
-          .join('')}</dl>`
-      : ''
-  }${bindings
+  const bindings = row.bindings.map((binding) => ({ label: binding.field, key: binding.variable }));
+  return `<div class="row-details">${specimenView(row)}${diffView(row)}<div class="detail-label">${esc(row.type)} · ${esc(row.action)}</div><code>${esc(row.name)}</code><p class="small">Source: ${esc(row.group)} / ${esc(row.path)}</p>${row.description ? `<p>${esc(row.description)}</p>` : ''}${bindings
     .map((binding) => {
       const target = preview?.variables.find((item) => item.key === binding.key);
       return `<p class="reference-detail">${icon('link')} ${esc(binding.label)} → ${target ? `<button class="alias-chip" data-open-token="${esc(target.key)}" data-origin-token="${esc(row.key)}">{${esc(target.group)} / ${esc(target.name)}}</button>` : esc(binding.key)}</p>`;
@@ -562,7 +543,7 @@ function variableView() {
     .slice(0, rowLimit)
     .map(
       (row) =>
-        `<tr class="token-row state-${row.action}"><th scope="row" class="name-column"><button class="token-name" data-row="${esc(row.key)}" aria-expanded="${expandedRows.has(row.key)}" title="${esc(row.name)} · ${esc(row.action)}"><span class="sr-only">${esc(row.action)} · </span><span class="row-chevron ${expandedRows.has(row.key) ? 'expanded' : ''}">${icon('chevron')}</span><span>${esc(row.name)}</span>${row.action !== 'unchanged' ? `<span class="row-status" aria-hidden="true">${esc(row.action)}</span>` : ''}${row.action === 'conflicting' ? '<span class="error-color" aria-label="Conflict">!</span>' : ''}</button></th>${modes.map((mode) => `<td>${valueTrigger(row, mode)}</td>`).join('')}</tr>${expandedRows.has(row.key) ? `<tr class="detail-row"><td colspan="${modes.length + 1}">${rowDetails(row)}</td></tr>` : ''}`,
+        `<tr class="token-row state-${row.action}"><th scope="row" class="name-column"><span class="token-name" tabindex="-1" data-row="${esc(row.key)}" title="${esc(row.name)} · ${esc(row.action)}"><span class="sr-only">${esc(row.action)} · </span><span>${esc(row.name)}</span>${row.action !== 'unchanged' ? `<span class="row-status" aria-hidden="true">${esc(row.action)}</span>` : ''}${row.action === 'conflicting' ? '<span class="error-color" aria-label="Conflict">!</span>' : ''}</span></th>${modes.map((mode) => `<td>${valueTrigger(row, mode)}</td>`).join('')}</tr>`,
     )
     .join('')}</tbody></table>${moreView(rows.length)}</div>`;
 }
@@ -574,7 +555,7 @@ function styleView() {
     .slice(0, rowLimit)
     .map(
       (row) =>
-        `<tr class="token-row state-${row.action}"><th scope="row" class="name-column"><button class="token-name" data-row="${esc(row.key)}" aria-expanded="${expandedRows.has(row.key)}" title="${esc(row.name)} · ${esc(row.action)}"><span class="sr-only">${esc(row.action)} · </span><span class="row-chevron ${expandedRows.has(row.key) ? 'expanded' : ''}">${icon('chevron')}</span><span>${esc(row.path)}</span>${row.action !== 'unchanged' ? `<span class="row-status" aria-hidden="true">${esc(row.action)}</span>` : ''}</button><span class="style-context">${esc(row.type === 'TEXT' ? 'Text' : row.type === 'EFFECT' ? 'Effect' : 'Paint')} · ${esc(row.theme)}</span></th><td>${valueTrigger(row, { key: 'style', name: row.theme })}</td></tr>${expandedRows.has(row.key) ? `<tr class="detail-row"><td colspan="2">${rowDetails(row)}</td></tr>` : ''}`,
+        `<tr class="token-row state-${row.action}"><th scope="row" class="name-column"><button class="token-name" data-row="${esc(row.key)}" aria-expanded="${expandedStyles.has(row.key)}" title="${esc(row.name)} · ${esc(row.action)}"><span class="sr-only">${esc(row.action)} · </span><span class="row-chevron ${expandedStyles.has(row.key) ? 'expanded' : ''}">${icon('chevron')}</span><span>${esc(row.path)}</span>${row.action !== 'unchanged' ? `<span class="row-status" aria-hidden="true">${esc(row.action)}</span>` : ''}</button><span class="style-context">${esc(row.type === 'TEXT' ? 'Text' : row.type === 'EFFECT' ? 'Effect' : 'Paint')} · ${esc(row.theme)}</span></th><td>${valueTrigger(row, { key: 'style', name: row.theme })}</td></tr>${expandedStyles.has(row.key) ? `<tr class="detail-row"><td colspan="2">${styleDetails(row)}</td></tr>` : ''}`,
     )
     .join('')}</tbody></table>${moreView(rows.length)}</div>`;
 }
@@ -950,7 +931,7 @@ function resetBrowse() {
   browseFilter = 'all';
   tab = settings.variables ? 'variables' : 'styles';
   rowLimit = 60;
-  expandedRows.clear();
+  expandedStyles.clear();
   scrollMemory.clear();
   disclosureMemory.clear();
 }
@@ -1265,9 +1246,9 @@ app.addEventListener('click', async (event) => {
       searchOpen = true;
       browseFilter = 'all';
       rowLimit = 60;
-      expandedRows.add(target.key);
+      if (!('values' in target)) expandedStyles.add(target.key);
       render();
-      const targetButton = [...(app.querySelectorAll<HTMLButtonElement>('[data-row]') ?? [])].find(
+      const targetButton = [...(app.querySelectorAll<HTMLElement>('[data-row]') ?? [])].find(
         (element) => element.dataset.row === target.key,
       );
       targetButton?.focus();
@@ -1280,7 +1261,7 @@ app.addEventListener('click', async (event) => {
       ({ tab, scope, search, browseAll, browseFilter, rowLimit } = previous);
       searchOpen = !!search;
       render();
-      const originButton = [...(app.querySelectorAll<HTMLButtonElement>('[data-row]') ?? [])].find(
+      const originButton = [...(app.querySelectorAll<HTMLElement>('[data-row]') ?? [])].find(
         (element) => element.dataset.row === previous.origin,
       );
       originButton?.focus();
@@ -1297,8 +1278,8 @@ app.addEventListener('click', async (event) => {
       return;
     }
     if (button.dataset.row) {
-      if (expandedRows.has(button.dataset.row)) expandedRows.delete(button.dataset.row);
-      else expandedRows.add(button.dataset.row);
+      if (expandedStyles.has(button.dataset.row)) expandedStyles.delete(button.dataset.row);
+      else expandedStyles.add(button.dataset.row);
       render();
       return;
     }

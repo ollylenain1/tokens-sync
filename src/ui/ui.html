@@ -20,6 +20,29 @@
       aria-atomic="true"
     ></div>
     <!-- Editable layouts. Keep data-action, data-scroll, IDs and named slot comments when rearranging controls. -->
+    <template id="layout-topbar">
+      <header class="topbar">
+        <div class="brand">
+          <svg class="blueprint-mark" viewBox="0 0 45 50" aria-hidden="true" focusable="false">
+            <path d="M0 0H29.5523V50H0V0Z" fill="currentColor" />
+            <path
+              d="M39.1134 10.0806C39.1134 15.648 34.5734 20.1613 28.9729 20.1613C23.3725 20.1613 18.8325 15.648 18.8325 10.0806C18.8325 4.51326 23.3725 0 28.9729 0C34.5734 0 39.1134 4.51326 39.1134 10.0806Z"
+              fill="#00AEEF"
+              style="fill: #00aeef; fill: color(display-p3 0 0.6824 0.9373); fill-opacity: 1"
+            />
+            <path
+              d="M44.7917 35.0807C44.7917 43.3204 38.0724 50 29.7838 50C21.4951 50 14.7759 43.3204 14.7759 35.0807C14.7759 26.8409 21.4951 20.1613 29.7838 20.1613C38.0724 20.1613 44.7917 26.8409 44.7917 35.0807Z"
+              fill="#006DE3"
+              style="fill: #006de3; fill: color(display-p3 0 0.4275 0.8902); fill-opacity: 1"
+            />
+          </svg>
+          <span>Blueprint</span>
+          <span class="brand-sub">Token Sync</span>
+        </div>
+        <!-- status -->
+      </header>
+    </template>
+
     <template id="layout-welcome">
       <main class="main welcome" aria-labelledby="welcome-title">
         <div class="welcome-inner">

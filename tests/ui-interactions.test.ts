@@ -476,7 +476,7 @@ test('global browsing finds other collections and opening a result preserves syn
   await ui.click({ openToken: key });
   assert.match(ui.app.innerHTML, /Planned variables in Interface/);
   assert.match(ui.app.innerHTML, /Back to previous token/);
-  assert.match(ui.app.innerHTML, /Current Figma/);
+  assert.doesNotMatch(ui.app.innerHTML, /class="detail-row"|class="row-chevron/);
   await ui.click({ action: 'back-to-token' });
   assert.match(ui.app.innerHTML, /Results across all collections/);
   assert.match(ui.app.innerHTML, /value="surface"/);
@@ -490,27 +490,24 @@ test('alias navigation opens its target and returns to the originating collectio
     .exec(ui.app.innerHTML)![1]
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&');
-  await ui.click({ row: key });
-  const target = /data-open-token="([^"]+)" data-origin-token/
-    .exec(ui.app.innerHTML)![1]
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&');
+  const preview = ui.requests.find((request) => request.type === 'preview');
+  const plan = planSync(
+    await buildDesired(preview.project, preview.settings),
+    { identity: 'ui', collections: [], variables: [], styles: [] },
+    emptyRegistry('ui'),
+  );
+  const target = previewPayload(plan).variables.find((row) => row.key === key)!.values.light.alias!;
   await ui.click({ openToken: target, originToken: key });
   assert.match(ui.app.innerHTML, /Planned variables in Foundations/);
   await ui.click({ action: 'back-to-token' });
   assert.match(ui.app.innerHTML, /Planned variables in Interface/);
-  assert.match(ui.app.innerHTML, /data-origin-token/);
+  assert.match(ui.app.innerHTML, /data-value=/);
 });
 
-test('window size changes preserve the current collection, search and expanded row without another preview', async () => {
+test('window size changes preserve the current collection, and search without another preview', async () => {
   const ui = await openUI();
   await ui.change({ id: 'collection-scope', value: 'Interface' });
   await ui.search('surface');
-  const key = /data-row="([^"]*surface[^"]*)"/
-    .exec(ui.app.innerHTML)![1]
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&');
-  await ui.click({ row: key });
   const previewRequests = ui.requests.filter((request) => request.type === 'preview').length;
   await ui.resizeKey('ArrowRight');
   assert.equal(ui.requests[ui.requests.length - 1].type, 'resize');
@@ -519,7 +516,7 @@ test('window size changes preserve the current collection, search and expanded r
   assert.equal(ui.requests.at(-1).persist, true);
   assert.match(ui.app.innerHTML, /Planned variables in Interface/);
   assert.match(ui.app.innerHTML, /value="surface"/);
-  assert.match(ui.app.innerHTML, /Current Figma/);
+  assert.doesNotMatch(ui.app.innerHTML, /class="detail-row"|class="row-chevron/);
   assert.equal(ui.requests.filter((request) => request.type === 'preview').length, previewRequests);
   await ui.resizeKey('ArrowLeft');
   assert.equal(ui.requests.at(-1).width, 440);
