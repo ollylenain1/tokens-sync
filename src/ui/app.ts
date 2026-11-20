@@ -348,16 +348,33 @@ function errorView() {
     : '';
 }
 function progressView() {
-  return busy()
-    ? `<div class="loading" role="status" aria-live="polite"><div class="loading-line"><span class="spinner"></span><span id="progress-text">${esc(progress.text || statusLabel())}</span></div><div class="progress-track"><div id="progress-fill" class="progress-fill" style="width:${progress.total ? Math.round((progress.done / progress.total) * 100) : 15}%"></div></div></div>`
-    : '';
+  if (!busy()) return '';
+  const known = progress.total > 0;
+  const percent = known
+    ? Math.min(100, Math.max(0, Math.round((progress.done / progress.total) * 100)))
+    : 0;
+  return `<div class="loading${phase === 'syncing' ? ' sync-progress' : ''}"><div class="loading-line"><span class="spinner" aria-hidden="true"></span><span id="progress-text" role="status">${esc(progress.text || statusLabel())}</span></div><div class="progress-metrics"><span id="progress-count">${known ? `Step ${progress.done} of ${progress.total}` : 'Preparing…'}</span><span id="progress-percent">${known ? `${percent}%` : ''}</span></div><div id="progress-track" class="progress-track${known ? '' : ' indeterminate'}" role="progressbar" aria-label="${phase === 'syncing' ? 'Sending to Figma' : 'Progress'}" aria-valuemin="0" aria-valuemax="100"${known ? ` aria-valuenow="${percent}"` : ''}><div id="progress-fill" class="progress-fill" style="width:${known ? percent : 35}%"></div></div></div>`;
 }
 function updateProgress() {
-  const text = document.getElementById('progress-text'),
-    fill = document.getElementById('progress-fill');
+  const text = document.getElementById('progress-text');
+  const fill = document.getElementById('progress-fill');
+  const track = document.getElementById('progress-track');
+  const count = document.getElementById('progress-count');
+  const percentage = document.getElementById('progress-percent');
+  const known = Number.isFinite(progress.total) && progress.total > 0;
+  const done = Number.isFinite(progress.done)
+    ? Math.max(0, Math.min(progress.done, progress.total))
+    : 0;
+  const percent = known ? Math.round((done / progress.total) * 100) : 0;
   if (text) text.textContent = progress.text;
-  if (fill)
-    fill.style.width = `${progress.total ? Math.round((progress.done / progress.total) * 100) : 15}%`;
+  if (count) count.textContent = known ? `Step ${done} of ${progress.total}` : 'Preparing…';
+  if (percentage) percentage.textContent = known ? `${percent}%` : '';
+  if (fill) fill.style.width = `${known ? percent : 35}%`;
+  if (track) {
+    track.classList.toggle('indeterminate', !known);
+    if (known) track.setAttribute('aria-valuenow', String(percent));
+    else track.removeAttribute('aria-valuenow');
+  }
 }
 function conflictControls(row: Row) {
   if (row.action !== 'conflicting') return '';
@@ -684,6 +701,8 @@ function updateSendDialog(modal: HTMLDialogElement) {
 }
 function sendDialogView() {
   if (!dialog) return '';
+  if (phase === 'syncing')
+    return `<dialog class="sync-dialog sync-progress-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Sending to Figma</h2></header><div class="dialog-body">${progressView()}<p class="small">Creating and updating your selected variables and styles.</p></div><footer class="dialog-footer"><button data-action="cancel">Stop sync</button></footer></dialog>`;
   if (dialog === 'branch')
     return `<dialog class="sync-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Switch branch</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close branch switcher"${disabled()}>${icon('close')}</button></header><form id="branch-form"><div class="dialog-body"><label class="field"><span>Branch name</span><input id="branch-name" value="${esc(branchDraft)}" required autocapitalize="off" autocomplete="off" spellcheck="false"${disabled()}></label>${progressView()}${error ? `<div class="notice error" role="alert">${esc(error)}</div>` : ''}</div><footer class="dialog-footer">${busy() ? '<button type="button" data-action="cancel">Stop</button>' : '<button type="button" data-action="close-dialog">Cancel</button>'}<button type="submit" class="primary" data-action="switch-branch"${disabled()}>Switch branch</button></footer></form></dialog>`;
   if (dialog === 'issues' || dialog === 'conflicts') {
@@ -715,7 +734,7 @@ function sendDialogView() {
       return `<div class="send-group"><label class="inclusion-row"><input type="checkbox" data-group="${esc(group)}"${selectionState(count, options.length)}><span>${esc(group)}</span></label>${options.map((t) => `<label class="inclusion-row send-option"><input type="checkbox" data-send-theme="${esc(t.id)}"${checked(selectedIds.has(t.id))}${disabled(busy() && phase !== 'previewing')}><span>${esc(t.name)}</span></label>`).join('')}</div>`;
     })
     .join('');
-  return `<dialog class="sync-dialog" data-send-dialog aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Choose which themes to send to Figma.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<section class="send-groups" aria-label="Theme groups and options" data-scroll="send-options"><label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>${tree}</section>${phase === 'syncing' ? progressView() : ''}<div data-send-error>${errorView()}</div><div class="send-feedback" data-send-feedback>${sendFeedbackView()}</div></div><footer class="dialog-footer">${phase === 'syncing' ? '<button data-action="cancel">Stop sync</button>' : ''}<button class="primary" data-action="confirm-send"${disabled(sendBlocked())}>${sendLabel()}</button></footer></dialog>`;
+  return `<dialog class="sync-dialog" data-send-dialog aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Choose which themes to send to Figma.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<section class="send-groups" aria-label="Theme groups and options" data-scroll="send-options"><label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>${tree}</section><div data-send-error>${errorView()}</div><div class="send-feedback" data-send-feedback>${sendFeedbackView()}</div></div><footer class="dialog-footer"><button class="primary" data-action="confirm-send"${disabled(sendBlocked())}>${sendLabel()}</button></footer></dialog>`;
 }
 async function closeDialog() {
   if (dialog === 'branch') {
@@ -771,7 +790,7 @@ function mainView() {
   const c = connection;
   return `<main class="main workspace companion-workspace"><section class="source-row"><span class="source-icon">${c && !sample ? providerLogo(c.provider) : icon('git')}</span><div class="source-text"><button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.name || c?.repository)}</span>${icon('chevron')}</button></div>${settingsMenu()}</section>
   ${tab !== 'variables' ? `<div class="secondary-heading"><button class="quiet tiny" data-tab="variables">← Variables</button><strong>Styles</strong></div>` : ''}${browserToolbar()}
-  <div class="feedback">${dialog === 'branch' ? '' : progressView() + errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}</div>
+  <div class="feedback">${dialog === 'branch' || phase === 'syncing' ? '' : progressView() + errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}</div>
   <section class="browser-content" aria-label="${tab === 'styles' ? 'Styles' : 'Variables'}" aria-busy="${busy()}">${tab === 'variables' ? variableView() : styleView()}</section>
   ${issues || conflicts ? `<div class="export-warnings">${conflicts ? `<button class="quiet error-color" data-action="conflicts">${conflicts} conflicts · Review</button>` : ''}${issues ? `<button class="quiet" data-action="issues">Review export <span class="count-pill">${issues}</span> ${icon('chevron')}</button>` : ''}</div>` : ''}
   </main><footer class="footer workspace-footer companion-footer"><div class="footer-row">${busy() ? `<button data-action="cancel"${disabled(phase === 'previewing')}>Stop</button>` : `<div class="source-actions"><button class="branch-button" data-action="${c && !sample ? 'open-branch' : 'edit'}" aria-label="${sample ? 'Connect repository' : c ? 'Switch branch' : 'Edit repository connection'}"${c && !sample ? ` aria-expanded="${!!branchMenu}"${branchMenu ? ' aria-controls="branch-options"' : ''}` : ''}>${icon('branch')}<span>${esc(sample ? 'Sample' : (c?.branch ?? 'main'))}</span>${icon('chevron')}</button><button class="icon-button" data-action="fetch" title="${sample ? 'Reload sample' : 'Fetch updates'}" aria-label="${sample ? 'Reload sample' : 'Fetch updates'}">${icon('refresh')}</button>${branchMenuView()}</div>`}<div class="send-actions"><button class="sync-button" data-action="send"${disabled(busy() || !project)}>${icon('arrow')}${demo ? 'Export preview' : 'Send to Figma'}</button><button class="icon-button" data-action="send-menu" aria-label="Choose output to send" aria-expanded="${sendMenuOpen}"${disabled(busy() || !project)}>${icon('chevron')}</button>${sendMenuOpen ? '<div class="menu send-menu"><button data-action="send-variables">Send variables only</button><button data-action="send-styles">Send styles only</button></div>' : ''}</div></div></footer>${sendDialogView()}`;

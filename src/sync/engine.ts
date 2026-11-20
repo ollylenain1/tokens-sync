@@ -30,6 +30,7 @@ export async function applyPlan(
   store: RegistryStore,
   control: RunControl,
 ): Promise<SyncReport> {
+  control.progress('Checking the Figma document…', 0, 0);
   const current = await adapter.snapshot();
   if (documentStamp(current) !== plan.documentStamp)
     throw new SyncError(
@@ -69,6 +70,7 @@ export async function applyPlan(
   };
   const blocked = (op: { action: string }) => ['conflicting', 'skipped'].includes(op.action);
   const selectedStyles = plan.styles.filter((s) => !blocked(s));
+  control.progress('Loading fonts…', 0, 0);
   const failedFonts = await adapter.loadFonts(selectedStyles.map((s) => s.desired));
   if (documentStamp(await adapter.snapshot()) !== plan.documentStamp)
     throw new SyncError(
@@ -79,7 +81,10 @@ export async function applyPlan(
     variableIds = new Map<string, string>();
   const modeIds = new Map<string, string>(),
     failures = new Set<string>();
-  const total = plan.collections.length + plan.variables.length * 2 + plan.styles.length;
+  const total =
+    (plan.model.settings.variables ? plan.collections.length + plan.variables.length * 2 : 0) +
+    plan.styles.length +
+    1;
   let done = 0,
     dirty = false;
   function save(
@@ -457,12 +462,14 @@ export async function applyPlan(
       }
     }
   } finally {
+    control.progress('Saving sync results…', done, total);
     try {
       checkpoint();
     } finally {
       adapter.api.commitUndo();
     }
   }
+  if (!report.cancelled) control.progress('Finished sending to Figma', total, total);
   report.completedAt = new Date().toISOString();
   return report;
 }

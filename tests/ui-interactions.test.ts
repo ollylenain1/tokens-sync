@@ -328,6 +328,29 @@ test('connection testing exposes an enabled Stop action and cancels its bridged 
   assert.match(ui.app.innerHTML, /Fetch cancelled/);
 });
 
+test('sync opens a focused progress dialog with an indeterminate preflight and Stop control', async () => {
+  const ui = await openUI(false, {
+    created: 1,
+    updated: 0,
+    unchanged: 0,
+    skipped: 0,
+    failed: 0,
+    cancelled: false,
+    diagnostics: [],
+  });
+  await ui.click({ action: 'send' });
+  const pending = ui.click({ action: 'confirm-send' });
+  const dialog = ui.app.innerHTML.slice(ui.app.innerHTML.indexOf('<dialog'));
+  assert.match(dialog, /Sending to Figma/);
+  assert.match(dialog, /role="progressbar"/);
+  assert.match(dialog, /progress-track indeterminate/);
+  assert.doesNotMatch(dialog, /aria-valuenow|data-send-theme/);
+  assert.match(dialog, /data-action="cancel">Stop sync/);
+  assert.equal((ui.app.innerHTML.match(/id="progress-track"/g) ?? []).length, 1);
+  await pending;
+  assert.match(ui.app.innerHTML, /Last sync result/);
+});
+
 test('pointer rerenders retain pointer modality and keyboard navigation restores focus indicators', async () => {
   const ui = await openUI();
   ui.windowHandlers.get('keydown')!({ key: 'Tab' });

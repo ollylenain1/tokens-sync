@@ -12,6 +12,8 @@ async function controller() {
     messages: any[] = [];
   const api: any = mock.api;
   api.showUI = () => {};
+  const notifications: { message: string; options: any }[] = [];
+  api.notify = (message: string, options: any) => notifications.push({ message, options });
   const sizes: number[][] = [];
   api.ui = {
     postMessage: (message: unknown) => messages.push(message),
@@ -46,7 +48,7 @@ async function controller() {
     await api.ui.onmessage({ type, id: request, ...data });
     return messages.find((m) => m.id === request);
   }
-  return { ...mock, local, messages, send, sizes };
+  return { ...mock, local, messages, send, sizes, notifications };
 }
 test('bundled controller completes preview → sync → unchanged preview through its real message bridge', async () => {
   const c = await controller();
@@ -62,6 +64,11 @@ test('bundled controller completes preview → sync → unchanged preview throug
   const result = await c.send('sync', { planId: first.result.id });
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.result.failed, 0);
+  assert.match(c.notifications[0].message, /Sync complete.*created/);
+  const progress = c.messages.filter((message) => message.type === 'progress');
+  assert.equal(progress[0].total, 0);
+  assert.equal(progress.at(-1).done, progress.at(-1).total);
+  assert.equal(progress.at(-1).text, 'Finished sending to Figma');
   const next = await c.send('preview', { settings: defaultSettings });
   assert.equal(next.ok, true);
   assert.equal(next.result.canSync, false);
@@ -70,6 +77,7 @@ test('bundled controller completes preview → sync → unchanged preview throug
   const stale = await c.send('sync', { planId: first.result.id });
   assert.equal(stale.ok, false);
   assert.equal(stale.code, 'STALE_PREVIEW');
+  assert.equal(c.notifications.at(-1)?.options.error, true);
 });
 test('credential storage is opt-in, separated from config, and removed on disconnect', async () => {
   const c = await controller();

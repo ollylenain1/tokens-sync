@@ -4,7 +4,13 @@ import { defaultSettings } from '../src/core/model';
 import { buildDesired } from '../src/core/desired';
 import { emptyRegistry, planSync } from '../src/sync/planner';
 import { previewPayload } from '../src/ui/preview-model';
-import { omittedCount, previewStatus, reportHasIssues, reportTitle } from '../src/ui/sync-status';
+import {
+  omittedCount,
+  previewStatus,
+  reportHasIssues,
+  reportTitle,
+  syncNotification,
+} from '../src/ui/sync-status';
 import { fixture, project } from './helpers';
 
 test('conversion omissions cannot appear as an unqualified successful or up-to-date result', async () => {
@@ -31,6 +37,12 @@ test('conversion omissions cannot appear as an unqualified successful or up-to-d
   };
   assert(reportHasIssues(report));
   assert.equal(reportTitle(report), 'Synced with 1 skipped item');
+  assert.equal(syncNotification(report), 'Synced with 1 skipped item · 1 created');
+  assert.equal(syncNotification({ ...report, cancelled: true }), 'Sync stopped · 1 created');
+  assert.equal(
+    syncNotification({ ...report, failed: 2 }),
+    'Sync finished with 2 failed items · 1 created',
+  );
 });
 
 test('status follows the current plan when settings introduce work after a successful sync', async () => {

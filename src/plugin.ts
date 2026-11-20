@@ -15,6 +15,7 @@ import { RegistryStore } from './figma/registry';
 import { Choices, planSync } from './sync/planner';
 import { RunControl, applyPlan } from './sync/engine';
 import { previewPayload } from './ui/preview-model';
+import { reportHasIssues, syncNotification } from './ui/sync-status';
 import { readProviderRoute, PluginFetcher } from './providers/plugin-transport';
 
 figma.showUI(__html__, {
@@ -162,7 +163,12 @@ figma.ui.onmessage = async (message: unknown) => {
         };
         const apply = plan;
         plan = undefined;
-        result = await applyPlan(apply, adapter, store.read(), store, control);
+        const report = await applyPlan(apply, adapter, store.read(), store, control);
+        result = report;
+        figma.notify(syncNotification(report), {
+          timeout: reportHasIssues(report) ? 7000 : 4000,
+          error: report.failed > 0,
+        });
         break;
       }
       default:
@@ -170,6 +176,11 @@ figma.ui.onmessage = async (message: unknown) => {
     }
     post({ id, ok: true, result });
   } catch (error) {
+    if (message.type === 'sync')
+      figma.notify('Sync could not finish. Review the error in Blueprint.', {
+        error: true,
+        timeout: 7000,
+      });
     post({
       id,
       ok: false,

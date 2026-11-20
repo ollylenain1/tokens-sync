@@ -44,3 +44,13 @@ export function reportTitle(report: SyncReport): string {
   if (report.diagnostics.some((d) => d.level === 'error')) return 'Sync finished with errors';
   return 'Sync complete';
 }
+
+export function syncNotification(report: SyncReport): string {
+  const counts = [
+    report.created ? `${report.created} created` : '',
+    report.updated ? `${report.updated} updated` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return `${reportTitle(report)}${counts ? ` · ${counts}` : ''}`;
+}

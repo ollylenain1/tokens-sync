@@ -1200,6 +1200,54 @@ code {
   background: var(--text);
   transition: width 0.2s;
 }
+.progress-metrics {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.sync-progress-dialog .dialog-heading {
+  padding: 22px 22px 8px;
+}
+.sync-progress-dialog .dialog-body {
+  padding: 8px 22px 22px;
+}
+.sync-progress-dialog .dialog-body > p {
+  margin: 16px 0 0;
+}
+.sync-progress {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.sync-progress .loading-line {
+  min-height: 36px;
+  overflow-wrap: anywhere;
+}
+.sync-progress .progress-track {
+  height: 8px;
+  border-radius: 8px;
+}
+.progress-track.indeterminate .progress-fill {
+  animation: progress-indeterminate 1.3s ease-in-out infinite;
+}
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(290%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill,
+  .progress-track.indeterminate .progress-fill,
+  .spinner {
+    animation: none;
+    transition: none;
+  }
+}
 .empty {
   flex: 1;
   padding: 36px 24px;
