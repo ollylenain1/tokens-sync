@@ -994,11 +994,6 @@ async function sync() {
 }
 app.addEventListener('input', (event) => {
   const input = event.target as HTMLInputElement;
-  if (input.name === 'baseUrl' && input.value !== draft.baseUrl) {
-    draft.token = '';
-    const secret = app.querySelector<HTMLInputElement>('input[name="token"]');
-    if (secret) secret.value = '';
-  }
   if (input.name && (input.name === 'name' || input.name in draft))
     (draft as any)[input.name] = input.type === 'checkbox' ? input.checked : input.value;
   if (input.id === 'branch-name') branchDraft = input.value;

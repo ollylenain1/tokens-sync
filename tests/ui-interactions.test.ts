@@ -136,6 +136,8 @@ async function openUI(
     requests,
     click,
     change,
+    input: async (input: Record<string, unknown>) =>
+      handlers.get('input')!({ target: { dataset: {}, ...input } }),
     search,
     resizeKey: async (key: string) => {
       await handlers.get('keydown')!({
@@ -472,6 +474,37 @@ test('partial composite diagnostics expose source definitions without changing e
   assert.match(ui.app.innerHTML, /PARTIAL_COMPOSITE/);
   assert.equal(ui.requests.length, count);
 });
+
+for (const provider of ['github', 'gitlab']) {
+  test(`${provider} preserves the access token when the server URL is edited after it`, async () => {
+    const ui = await openUI(false, undefined, async (url) =>
+      Response.json(String(url).includes('/projects?') ? [] : { default_branch: 'main' }),
+    );
+    await ui.click({ action: 'edit' });
+    await ui.click({ provider });
+    await ui.input({ name: 'owner', value: 'team' });
+    await ui.input({ name: 'repository', value: 'tokens' });
+    await ui.input({ name: 'token', type: 'password', value: 'test-access-token' });
+    await ui.input({ name: 'remember', type: 'checkbox', checked: true });
+    for (const value of ['', 'https://', `https://${provider}.company.test`, ''])
+      await ui.input({ name: 'baseUrl', value });
+    const baseUrl = `https://${provider}.company.test`;
+    await ui.input({ name: 'baseUrl', value: baseUrl });
+    await ui.change({ name: 'baseUrl', value: baseUrl });
+    assert.equal(ui.requests.filter((request) => request.type === 'providerFetch').length, 0);
+
+    await ui.click({ action: 'default-branch' });
+    assert.match(ui.app.innerHTML, /Default branch filled/);
+    assert.match(ui.app.innerHTML, /name="token" type="password" value="test-access-token"/);
+    assert.match(ui.app.innerHTML, /name="remember" checked/);
+    const requests = ui.requests.filter((request) => request.type === 'providerFetch');
+    assert(requests.length > 0);
+    for (const request of requests) {
+      assert.equal(request.connection.token, 'test-access-token');
+      assert.equal(new URL(request.url).origin, baseUrl);
+    }
+  });
+}
 
 test('GitLab setup mirrors project-path fields and validates content before saving a named connection', async () => {
   const urls: string[] = [];
