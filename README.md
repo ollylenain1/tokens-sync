@@ -55,6 +55,7 @@ Re-run the development plugin after rebuilding; the Figma iframe does not hot-re
 
 ## Documentation
 
+- [Developer guide](docs/DEVELOPER_GUIDE.md): start here for the plugin's purpose, user workflow, implementation, architecture and local development setup.
 - [Research and decisions](docs/RESEARCH.md): primary sources, verified APIs and choices recorded before implementation.
 - [Architecture](docs/ARCHITECTURE.md): module boundaries, mapping identity, preservation, storage and failure handling.
 - [Compatibility and limits](docs/COMPATIBILITY.md): precise input/conversion support and unsupported behaviour.
