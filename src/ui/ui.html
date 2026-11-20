@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Blueprint · Token Sync</title>
+    <!-- Edit src/ui/ui.html for layouts, style.css for appearance and app.ts for interactions.
+         npm run build combines them into dist/ui.html for Figma. -->
+    <style>
+      /* INLINE_CSS */
+    </style>
+  </head>
+  <body>
+    <div id="app"><div class="boot" role="status">Opening Blueprint…</div></div>
+    <div
+      id="announcements"
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+    <!-- Editable layouts. Keep data-action, data-scroll, IDs and named slot comments when rearranging controls. -->
+    <template id="layout-welcome">
+      <main class="main welcome" aria-labelledby="welcome-title">
+        <div class="welcome-inner">
+          <figure class="welcome-art" aria-label="Example color tokens from tokens.json">
+            <figcaption><span aria-hidden="true">{ }</span> tokens.json</figcaption>
+            <div class="welcome-palette">
+              <div class="welcome-swatch ink"><span>color.ink</span><small>#182230</small></div>
+              <div class="welcome-swatch paper"><span>color.paper</span><small>#FFFFFF</small></div>
+              <div class="welcome-swatch brand-color">
+                <span>color.brand</span><small>#5265ED</small>
+              </div>
+            </div>
+          </figure>
+          <div class="welcome-copy">
+            <h1 id="welcome-title">Bring your tokens into Figma.</h1>
+            <p>
+              Connect a GitHub or GitLab repository to preview your tokens, then apply them as Figma
+              variables and styles.
+            </p>
+            <div class="welcome-actions">
+              <button class="primary" data-action="edit">
+                Connect repository
+                <!-- chevron -->
+              </button>
+              <button data-action="sample">Explore sample tokens</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </template>
+
+    <template id="layout-workspace">
+      <main class="main workspace companion-workspace">
+        <section class="source-row">
+          <span class="source-icon"><!-- provider --></span>
+          <div class="source-text"><!-- source --></div>
+          <!-- settings -->
+        </section>
+        <!-- navigation -->
+        <div class="feedback"><!-- feedback --></div>
+        <!-- table -->
+        <!-- warnings -->
+      </main>
+      <footer class="footer workspace-footer companion-footer">
+        <div class="footer-row">
+          <!-- source-actions -->
+          <!-- send-actions -->
+        </div>
+      </footer>
+      <!-- dialog -->
+    </template>
+
+    <template id="layout-send-options">
+      <dialog
+        class="sync-dialog"
+        data-send-dialog
+        aria-labelledby="dialog-title"
+        aria-describedby="send-description"
+      >
+        <header class="dialog-heading">
+          <h2 id="dialog-title"><!-- title --></h2>
+          <!-- close -->
+        </header>
+        <div class="dialog-body" data-scroll="dialog">
+          <p id="send-description">Choose which themes to send to Figma.</p>
+          <!-- sample-note -->
+          <section
+            class="send-groups"
+            aria-label="Theme groups and options"
+            data-scroll="send-options"
+          >
+            <!-- all-themes -->
+            <!-- theme-rows -->
+          </section>
+          <div data-send-error><!-- error --></div>
+          <div class="send-feedback" data-send-feedback><!-- feedback --></div>
+        </div>
+        <footer class="dialog-footer"><!-- confirm --></footer>
+      </dialog>
+    </template>
+
+    <template id="layout-sync-progress">
+      <dialog class="sync-dialog sync-progress-dialog" aria-labelledby="dialog-title">
+        <header class="dialog-heading"><h2 id="dialog-title">Sending to Figma</h2></header>
+        <div class="dialog-body">
+          <!-- progress -->
+          <p class="small">Creating and updating your selected variables and styles.</p>
+        </div>
+        <footer class="dialog-footer"><button data-action="cancel">Stop sync</button></footer>
+      </dialog>
+    </template>
+
+    <template id="layout-sync-result">
+      <dialog class="sync-dialog result-dialog" aria-labelledby="dialog-title">
+        <header class="dialog-heading">
+          <h2 id="dialog-title">Last sync result</h2>
+          <button class="quiet icon-button" data-action="close-dialog" aria-label="Close result">
+            <!-- close -->
+          </button>
+        </header>
+        <div class="dialog-body" data-scroll="dialog"><!-- report --></div>
+      </dialog>
+    </template>
+
+    <script>
+      /* INLINE_JS */
+    </script>
+  </body>
+</html>

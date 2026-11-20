@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { build } from 'esbuild';
+import { layoutElement } from './ui-layout-fixture';
 
 const ui = build({
   entryPoints: ['src/ui/app.ts'],
@@ -50,7 +51,7 @@ async function openUI(source: 'parent' | 'relay' | 'null', respond = true, failu
       },
     },
     parent,
-    document: { getElementById: () => app },
+    document: { getElementById: (id: string) => (id === 'app' ? app : layoutElement(id)) },
     structuredClone,
     setTimeout: (callback: () => void) => {
       timers.set(++nextTimer, callback);

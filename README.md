@@ -51,7 +51,9 @@ npm run preview   # local interface preview at http://127.0.0.1:4174/?demo=1
 npm run package   # build a zip containing source, docs, fixtures and compiled plugin
 ```
 
-Re-run the development plugin after rebuilding; the Figma iframe does not hot-reload. UI resources are bundled locally; no CDN or backend is needed. Tests do not require credentials or modify a Figma file.
+For manual layout and copy changes, edit [src/ui/ui.html](src/ui/ui.html). Search for the named templates `layout-welcome`, `layout-workspace`, `layout-send-options`, `layout-sync-progress`, and `layout-sync-result`. Comments such as `<!-- theme-rows -->` mark where the app inserts live content. Keep those comments, element IDs, and `data-*` attributes when moving controls. Edit [style.css](src/ui/style.css) for colours, spacing, and typography, and [app.ts](src/ui/app.ts) for dynamic controls such as repository fields and token rows.
+
+Run `npm run build` to regenerate the self-contained `dist/ui.html`. Direct edits to that generated file last until the next build. Re-run the development plugin after rebuilding; the Figma iframe does not hot-reload. UI resources are bundled locally; no CDN or backend is needed. Tests do not require credentials or modify a Figma file.
 
 ## Documentation
 

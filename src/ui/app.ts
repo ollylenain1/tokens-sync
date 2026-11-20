@@ -305,21 +305,15 @@ function providerLogo(provider: 'github' | 'gitlab') {
         image(providerLogos.githubWhite, 'github-dark')
     : image(providerLogos.gitlab);
 }
+// Slots take trusted view fragments. Escape repository text before including it.
+function layout(name: string, slots: Record<string, string>) {
+  const template = document.getElementById(`layout-${name}`) as HTMLTemplateElement;
+  return template.innerHTML
+    .trim()
+    .replace(/<!-- ([a-z-]+) -->/g, (marker, key: string) => slots[key] ?? marker);
+}
 function welcomeView() {
-  return `<main class="main welcome" aria-labelledby="welcome-title"><div class="welcome-inner">
-    <figure class="welcome-art" aria-label="Example color tokens from tokens.json">
-      <figcaption><span aria-hidden="true">{ }</span> tokens.json</figcaption>
-      <div class="welcome-palette">
-        <div class="welcome-swatch ink"><span>color.ink</span><small>#182230</small></div>
-        <div class="welcome-swatch paper"><span>color.paper</span><small>#FFFFFF</small></div>
-        <div class="welcome-swatch brand-color"><span>color.brand</span><small>#5265ED</small></div>
-      </div>
-    </figure>
-    <div class="welcome-copy"><h1 id="welcome-title">Bring your tokens into Figma.</h1>
-      <p>Connect a GitHub or GitLab repository to preview your tokens, then apply them as Figma variables and styles.</p>
-      <div class="welcome-actions"><button class="primary" data-action="edit">Connect repository ${icon('chevron')}</button><button data-action="sample">Explore sample tokens</button></div>
-    </div>
-  </div></main>`;
+  return layout('welcome', { chevron: icon('chevron') });
 }
 function connectionView() {
   const first = !connection && !sample;
@@ -701,8 +695,7 @@ function updateSendDialog(modal: HTMLDialogElement) {
 }
 function sendDialogView() {
   if (!dialog) return '';
-  if (phase === 'syncing')
-    return `<dialog class="sync-dialog sync-progress-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Sending to Figma</h2></header><div class="dialog-body">${progressView()}<p class="small">Creating and updating your selected variables and styles.</p></div><footer class="dialog-footer"><button data-action="cancel">Stop sync</button></footer></dialog>`;
+  if (phase === 'syncing') return layout('sync-progress', { progress: progressView() });
   if (dialog === 'branch')
     return `<dialog class="sync-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Switch branch</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close branch switcher"${disabled()}>${icon('close')}</button></header><form id="branch-form"><div class="dialog-body"><label class="field"><span>Branch name</span><input id="branch-name" value="${esc(branchDraft)}" required autocapitalize="off" autocomplete="off" spellcheck="false"${disabled()}></label>${progressView()}${error ? `<div class="notice error" role="alert">${esc(error)}</div>` : ''}</div><footer class="dialog-footer">${busy() ? '<button type="button" data-action="cancel">Stop</button>' : '<button type="button" data-action="close-dialog">Cancel</button>'}<button type="submit" class="primary" data-action="switch-branch"${disabled()}>Switch branch</button></footer></form></dialog>`;
   if (dialog === 'issues' || dialog === 'conflicts') {
@@ -718,7 +711,7 @@ function sendDialogView() {
     return `<dialog class="sync-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">${dialog === 'issues' ? 'Export review' : 'Resolve conflicts'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close details">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${dialog === 'issues' ? diagnosticsView() : recovery + conflicts.map((row) => `<details class="change"><summary>${esc(row.name)}</summary>${conflictControls(row)}${diffView(row)}</details>`).join('') || '<p>No unresolved conflicts.</p>'}</div></dialog>`;
   }
   if (dialog === 'report')
-    return `<dialog class="sync-dialog result-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><h2 id="dialog-title">Last sync result</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close result">${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog">${reportView()}</div></dialog>`;
+    return layout('sync-result', { close: icon('close'), report: reportView() });
   const { groups, themes, selectedIds } = sendSelection();
   function selectionState(count: number, total: number) {
     return (
@@ -734,7 +727,18 @@ function sendDialogView() {
       return `<div class="send-group"><label class="inclusion-row"><input type="checkbox" data-group="${esc(group)}"${selectionState(count, options.length)}><span>${esc(group)}</span></label>${options.map((t) => `<label class="inclusion-row send-option"><input type="checkbox" data-send-theme="${esc(t.id)}"${checked(selectedIds.has(t.id))}${disabled(busy() && phase !== 'previewing')}><span>${esc(t.name)}</span></label>`).join('')}</div>`;
     })
     .join('');
-  return `<dialog class="sync-dialog" data-send-dialog aria-labelledby="dialog-title" aria-describedby="send-description"><header class="dialog-heading"><h2 id="dialog-title">${demo ? 'Export preview' : 'Send to Figma'}</h2><button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button></header><div class="dialog-body" data-scroll="dialog"><p id="send-description">Choose which themes to send to Figma.</p>${sample ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>` : ''}<section class="send-groups" aria-label="Theme groups and options" data-scroll="send-options"><label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>${tree}</section><div data-send-error>${errorView()}</div><div class="send-feedback" data-send-feedback>${sendFeedbackView()}</div></div><footer class="dialog-footer"><button class="primary" data-action="confirm-send"${disabled(sendBlocked())}>${sendLabel()}</button></footer></dialog>`;
+  return layout('send-options', {
+    title: demo ? 'Export preview' : 'Send to Figma',
+    close: `<button class="quiet icon-button" data-action="close-dialog" aria-label="Close export options"${disabled()}>${icon('close')}</button>`,
+    'sample-note': sample
+      ? `<p class="small">${demo ? 'Browser preview only. Nothing will be written to Figma.' : 'Sample tokens will be written to this Figma file.'}</p>`
+      : '',
+    'all-themes': `<label class="inclusion-row send-group-heading"><input type="checkbox" data-send-all="all"${selectionState(selectedIds.size, themes.length)}><span>All ${groups.length} theme group${groups.length === 1 ? '' : 's'}, ${themes.length} option${themes.length === 1 ? '' : 's'}</span></label>`,
+    'theme-rows': tree,
+    error: errorView(),
+    feedback: `${sendFeedbackView()}`,
+    confirm: `<button class="primary" data-action="confirm-send"${disabled(sendBlocked())}>${sendLabel()}</button>`,
+  });
 }
 async function closeDialog() {
   if (dialog === 'branch') {
@@ -788,12 +792,23 @@ function mainView() {
   const conflicts = conflictCount(preview);
   const issues = groupDiagnostics(preview?.diagnostics ?? []).length;
   const c = connection;
-  return `<main class="main workspace companion-workspace"><section class="source-row"><span class="source-icon">${c && !sample ? providerLogo(c.provider) : icon('git')}</span><div class="source-text"><button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.name || c?.repository)}</span>${icon('chevron')}</button></div>${settingsMenu()}</section>
-  ${tab !== 'variables' ? `<div class="secondary-heading"><button class="quiet tiny" data-tab="variables">← Variables</button><strong>Styles</strong></div>` : ''}${browserToolbar()}
-  <div class="feedback">${dialog === 'branch' || phase === 'syncing' ? '' : progressView() + errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}</div>
-  <section class="browser-content" aria-label="${tab === 'styles' ? 'Styles' : 'Variables'}" aria-busy="${busy()}">${tab === 'variables' ? variableView() : styleView()}</section>
-  ${issues || conflicts ? `<div class="export-warnings">${conflicts ? `<button class="quiet error-color" data-action="conflicts">${conflicts} conflicts · Review</button>` : ''}${issues ? `<button class="quiet" data-action="issues">Review export <span class="count-pill">${issues}</span> ${icon('chevron')}</button>` : ''}</div>` : ''}
-  </main><footer class="footer workspace-footer companion-footer"><div class="footer-row">${busy() ? `<button data-action="cancel"${disabled(phase === 'previewing')}>Stop</button>` : `<div class="source-actions"><button class="branch-button" data-action="${c && !sample ? 'open-branch' : 'edit'}" aria-label="${sample ? 'Connect repository' : c ? 'Switch branch' : 'Edit repository connection'}"${c && !sample ? ` aria-expanded="${!!branchMenu}"${branchMenu ? ' aria-controls="branch-options"' : ''}` : ''}>${icon('branch')}<span>${esc(sample ? 'Sample' : (c?.branch ?? 'main'))}</span>${icon('chevron')}</button><button class="icon-button" data-action="fetch" title="${sample ? 'Reload sample' : 'Fetch updates'}" aria-label="${sample ? 'Reload sample' : 'Fetch updates'}">${icon('refresh')}</button>${branchMenuView()}</div>`}<div class="send-actions"><button class="sync-button" data-action="send"${disabled(busy() || !project)}>${icon('arrow')}${demo ? 'Export preview' : 'Send to Figma'}</button><button class="icon-button" data-action="send-menu" aria-label="Choose output to send" aria-expanded="${sendMenuOpen}"${disabled(busy() || !project)}>${icon('chevron')}</button>${sendMenuOpen ? '<div class="menu send-menu"><button data-action="send-variables">Send variables only</button><button data-action="send-styles">Send styles only</button></div>' : ''}</div></div></footer>${sendDialogView()}`;
+  return layout('workspace', {
+    provider: c && !sample ? providerLogo(c.provider) : icon('git'),
+    source: `<button class="source-name quiet" data-action="edit" title="Edit repository connection"${disabled()}><span>${esc(sample ? 'Sample tokens' : c?.name || c?.repository)}</span>${icon('chevron')}</button>`,
+    settings: settingsMenu(),
+    navigation: `${tab !== 'variables' ? `<div class="secondary-heading"><button class="quiet tiny" data-tab="variables">← Variables</button><strong>Styles</strong></div>` : ''}${browserToolbar()}`,
+    feedback: `${dialog === 'branch' || phase === 'syncing' ? '' : progressView() + errorView()}${notice ? `<div class="notice info" role="status">${esc(notice)}</div>` : ''}`,
+    table: `<section class="browser-content" aria-label="${tab === 'styles' ? 'Styles' : 'Variables'}" aria-busy="${busy()}">${tab === 'variables' ? variableView() : styleView()}</section>`,
+    warnings:
+      issues || conflicts
+        ? `<div class="export-warnings">${conflicts ? `<button class="quiet error-color" data-action="conflicts">${conflicts} conflicts · Review</button>` : ''}${issues ? `<button class="quiet" data-action="issues">Review export <span class="count-pill">${issues}</span> ${icon('chevron')}</button>` : ''}</div>`
+        : '',
+    'source-actions': busy()
+      ? `<button data-action="cancel"${disabled(phase === 'previewing')}>Stop</button>`
+      : `<div class="source-actions"><button class="branch-button" data-action="${c && !sample ? 'open-branch' : 'edit'}" aria-label="${sample ? 'Connect repository' : c ? 'Switch branch' : 'Edit repository connection'}"${c && !sample ? ` aria-expanded="${!!branchMenu}"${branchMenu ? ' aria-controls="branch-options"' : ''}` : ''}>${icon('branch')}<span>${esc(sample ? 'Sample' : (c?.branch ?? 'main'))}</span>${icon('chevron')}</button><button class="icon-button" data-action="fetch" title="${sample ? 'Reload sample' : 'Fetch updates'}" aria-label="${sample ? 'Reload sample' : 'Fetch updates'}">${icon('refresh')}</button>${branchMenuView()}</div>`,
+    'send-actions': `<div class="send-actions"><button class="sync-button" data-action="send"${disabled(busy() || !project)}>${icon('arrow')}${demo ? 'Export preview' : 'Send to Figma'}</button><button class="icon-button" data-action="send-menu" aria-label="Choose output to send" aria-expanded="${sendMenuOpen}"${disabled(busy() || !project)}>${icon('chevron')}</button>${sendMenuOpen ? '<div class="menu send-menu"><button data-action="send-variables">Send variables only</button><button data-action="send-styles">Send styles only</button></div>' : ''}</div>`,
+    dialog: sendDialogView(),
+  });
 }
 let renderedScreen = '';
 const scrollMemory = new Map<string, { top: number; left: number }>();

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { build } from 'esbuild';
+import { layoutElement } from './ui-layout-fixture';
 import { buildDesired } from '../src/core/desired';
 import { TokenProject, SyncReport } from '../src/core/model';
 import { emptyRegistry, planSync } from '../src/sync/planner';
@@ -109,7 +110,7 @@ async function openUI(
     parent,
     document: {
       documentElement: root,
-      getElementById: (id: string) => (id === 'app' ? app : null),
+      getElementById: (id: string) => (id === 'app' ? app : layoutElement(id)),
     },
     structuredClone,
     setTimeout,
